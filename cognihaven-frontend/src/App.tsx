@@ -1,14 +1,16 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { TelemetryProvider, useTelemetry } from './context/TelemetryContext';
 import { Login } from './components/Login';
 import { Dashboard } from './components/Dashboard';
-import { SOCDashboard } from './components/SOCDashboard';
 import { SessionFrozen } from './components/SessionFrozen';
 import { OtpModal } from './components/OtpModal';
+import { CalibrationModal } from './components/CalibrationModal';
+import { AdminLogin } from './components/AdminLogin';
+import { LiveSOC } from './components/LiveSOC';
 
 const AppContent: React.FC = () => {
-  const { isFrozen, needsOtp } = useTelemetry();
+  const { isFrozen, needsOtp, enrollSession, isCalibrated, username } = useTelemetry();
 
   return (
     <>
@@ -17,8 +19,21 @@ const AppContent: React.FC = () => {
       
       <Routes>
         <Route path="/" element={<Login />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/soc-admin" element={<SOCDashboard />} />
+        <Route 
+          path="/dashboard" 
+          element={
+            !username ? (
+              <Navigate to="/" />
+            ) : !isCalibrated ? (
+              <CalibrationModal onComplete={enrollSession} />
+            ) : (
+              <Dashboard />
+            )
+          } 
+        />
+        <Route path="/admin" element={<AdminLogin />} />
+        <Route path="/soc-admin" element={<LiveSOC />} />
+        <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </>
   );
