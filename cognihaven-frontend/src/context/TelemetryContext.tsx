@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { calculateMetrics, type KeystrokeEvent, type MouseTelemetryEvent } from '../utils/telemetry';
+import { extractRawMetrics, type KeystrokeRawEvent, type MouseRawEvent } from '../utils/telemetry';
 
 interface TelemetryContextType {
   sessionId: string;
@@ -19,12 +19,14 @@ export const TelemetryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [isFrozen, setIsFrozen] = useState(false);
   const [needsOtp, setNeedsOtp] = useState(false);
 
-  const keystrokesRef = useRef<KeystrokeEvent[]>([]);
-  const mouseMovementsRef = useRef<MouseTelemetryEvent[]>([]);
+  const keystrokesRef = useRef<KeystrokeRawEvent[]>([]);
+  const mouseMovementsRef = useRef<MouseRawEvent[]>([]);
   const lastBatchTimeRef = useRef<number>(Date.now());
 
   useEffect(() => {
     const handleKeyDown = (e: globalThis.KeyboardEvent) => {
+      // SECURITY: We only care about timing, so we don't need to store the specific key char
+      // but we use the key name to match keyup events correctly.
       keystrokesRef.current.push({
         key: e.key,
         keydownTimestamp: Date.now(),
@@ -45,7 +47,8 @@ export const TelemetryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         timestamp: Date.now(),
       });
 
-      if (mouseMovementsRef.current.length > 100) {
+      // Limit buffer size to 500 events per 3s batch to prevent memory spikes
+      if (mouseMovementsRef.current.length > 500) {
         mouseMovementsRef.current.shift();
       }
     };
@@ -58,7 +61,7 @@ export const TelemetryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const now = Date.now();
       const startTime = lastBatchTimeRef.current;
       
-      const batch = calculateMetrics(
+      const batch = extractRawMetrics(
         keystrokesRef.current,
         mouseMovementsRef.current,
         sessionId,
@@ -66,10 +69,18 @@ export const TelemetryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         now
       );
 
+      // Reset buffers
       keystrokesRef.current = [];
+      // Keep last mouse position for next batch dt calculation
+      if (mouseMovementsRef.current.length > 0) {
+        const lastMove = mouseMovementsRef.current[mouseMovementsRef.current.length - 1];
+        mouseMovementsRef.current = [lastMove];
+      }
+      
       lastBatchTimeRef.current = now;
 
-      if (batch.metrics.avg_dwell_time_ms > 0 || batch.metrics.avg_mouse_velocity_px_ms > 0) {
+      // Only stream if there is actually data to analyze
+      if (batch.keystrokes.length > 0 || batch.mouse_movements.length > 0) {
         try {
           const response = await fetch('http://localhost:8000/telemetry-stream', {
             method: 'POST',
@@ -89,7 +100,7 @@ export const TelemetryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             }
           }
         } catch (error) {
-          console.error('Failed to send telemetry:', error);
+          console.error('Failed to stream raw telemetry:', error);
         }
       }
     }, 3000);

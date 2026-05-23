@@ -1,71 +1,85 @@
-export interface KeystrokeEvent {
+export interface KeystrokeRawEvent {
   key: string;
   keydownTimestamp: number;
   keyupTimestamp?: number;
 }
 
-export interface MouseTelemetryEvent {
+export interface MouseRawEvent {
   x: number;
   y: number;
   timestamp: number;
+}
+
+export interface KeystrokeMetric {
+  dwell_time: number;
+  flight_time: number;
+}
+
+export interface MouseMetric {
+  x: number;
+  y: number;
+  dt: number; // time since last point in milliseconds
 }
 
 export interface TelemetryBatch {
   session_id: string;
   batch_start_time: number;
   batch_end_time: number;
-  metrics: {
-    avg_dwell_time_ms: number;
-    avg_flight_time_ms: number;
-    avg_mouse_velocity_px_ms: number;
-  };
+  keystrokes: KeystrokeMetric[];
+  mouse_movements: MouseMetric[];
 }
 
-export const calculateMetrics = (
-  keystrokes: KeystrokeEvent[],
-  mouseMovements: MouseTelemetryEvent[],
+export const extractRawMetrics = (
+  keystrokes: KeystrokeRawEvent[],
+  mouseMovements: MouseRawEvent[],
   sessionId: string,
   startTime: number,
   endTime: number
 ): TelemetryBatch => {
-  // Dwell Time: time a key is held down (keyup - keydown)
-  const dwellTimes = keystrokes
-    .filter((k) => k.keyupTimestamp !== undefined)
-    .map((k) => k.keyupTimestamp! - k.keydownTimestamp);
+  // Extract Raw Keystroke Dynamics
+  const keystrokeMetrics: KeystrokeMetric[] = [];
+  for (let i = 0; i < keystrokes.length; i++) {
+    const current = keystrokes[i];
+    if (current.keyupTimestamp) {
+      const dwell = current.keyupTimestamp - current.keydownTimestamp;
+      let flight = 0;
+      
+      if (i > 0) {
+        const previous = keystrokes[i - 1];
+        flight = current.keydownTimestamp - (previous.keyupTimestamp || previous.keydownTimestamp);
+      }
 
-  // Flight Time: time between key presses (keydown[i] - keyup[i-1])
-  const flightTimes: number[] = [];
-  for (let i = 1; i < keystrokes.length; i++) {
-    const flight = keystrokes[i].keydownTimestamp - (keystrokes[i - 1].keyupTimestamp || keystrokes[i - 1].keydownTimestamp);
-    if (flight > 0 && flight < 2000) { // Filter out long pauses (e.g. user left the keyboard)
-      flightTimes.push(flight);
+      // Only include valid dynamics (filter out massive pauses > 5s)
+      if (dwell > 0 && dwell < 5000 && flight >= 0 && flight < 5000) {
+        keystrokeMetrics.push({
+          dwell_time: dwell,
+          flight_time: flight,
+        });
+      }
     }
   }
 
-  // Mouse Velocity: pixels per millisecond
-  const velocities: number[] = [];
+  // Extract Raw Mouse Dynamics
+  const mouseMetrics: MouseMetric[] = [];
   for (let i = 1; i < mouseMovements.length; i++) {
-    const dx = mouseMovements[i].x - mouseMovements[i - 1].x;
-    const dy = mouseMovements[i].y - mouseMovements[i - 1].y;
-    const dt = mouseMovements[i].timestamp - mouseMovements[i - 1].timestamp;
-    if (dt > 0) {
-      const distance = Math.sqrt(dx * dx + dy * dy);
-      velocities.push(distance / dt);
+    const current = mouseMovements[i];
+    const previous = mouseMovements[i - 1];
+    const dt = current.timestamp - previous.timestamp;
+
+    if (dt > 0 && dt < 1000) { // Only capture continuous movement
+      mouseMetrics.push({
+        x: current.x,
+        y: current.y,
+        dt: dt
+      });
     }
   }
-
-  const avgDwell = dwellTimes.length > 0 ? dwellTimes.reduce((a, b) => a + b, 0) / dwellTimes.length : 0;
-  const avgFlight = flightTimes.length > 0 ? flightTimes.reduce((a, b) => a + b, 0) / flightTimes.length : 0;
-  const avgVelocity = velocities.length > 0 ? velocities.reduce((a, b) => a + b, 0) / velocities.length : 0;
 
   return {
     session_id: sessionId,
     batch_start_time: startTime,
     batch_end_time: endTime,
-    metrics: {
-      avg_dwell_time_ms: Number(avgDwell.toFixed(2)),
-      avg_flight_time_ms: Number(avgFlight.toFixed(2)),
-      avg_mouse_velocity_px_ms: Number(avgVelocity.toFixed(4)),
-    },
+    keystrokes: keystrokeMetrics,
+    mouse_movements: mouseMetrics,
   };
 };
