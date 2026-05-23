@@ -2,7 +2,7 @@ import numpy as np
 import joblib
 import os
 import pandas as pd
-from fastapi import FastAPI, Body
+from fastapi import FastAPI, Body, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
@@ -96,6 +96,16 @@ def extract_features(batch: TelemetryBatch):
 
 @app.post("/telemetry-stream")
 async def process_telemetry(batch: TelemetryBatch):
+
+    # --- Layer 1: Perimeter Screening (Rate Limiting) ---
+    if redis_client:
+        client_ip = request.client.host
+        request_count = redis_client.incr(f"rate_limit:{client_ip}")
+        if request_count == 1:
+            redis_client.expire(f"rate_limit:{client_ip}", 60) # 1-minute window
+        if request_count > 20:
+            raise HTTPException(status_code=429, detail="Layer 1 Block: Automated brute-force detected")
+        
     features = extract_features(batch)
     
     if model:
