@@ -6,8 +6,20 @@ from fastapi import FastAPI, Body
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
+import redis
+import json
 
 app = FastAPI()
+
+# --- Redis Setup ---
+try:
+    # decode_responses=True converts byte strings to normal strings automatically
+    redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+    redis_client.ping()
+    print("Redis connected successfully!")
+except Exception as e:
+    print(f"ERROR: Could not connect to Redis: {e}")
+    redis_client = None
 
 # Allow CORS for the React frontend
 app.add_middleware(
@@ -103,9 +115,23 @@ async def process_telemetry(batch: TelemetryBatch):
     else:
         risk_score = 0
     
+   # Determine the status string
+    status_string = "safe" if risk_score <= 30 else "warning" if risk_score <= 65 else "critical"
+
+    # --- Save to Redis ---
+    if redis_client:
+        redis_payload = {
+            "risk_score": risk_score,
+            "status": status_string
+        }
+        # Save with a 1-hour expiration
+        redis_client.setex(f"session:{batch.session_id}", 3600, json.dumps(redis_payload))
+
+    
     print(f"\n[SESSION: {batch.session_id}]")
     print(f"Features: {[round(f, 2) for f in features]}")
     print(f"Decision Score: {raw_score:.4f} | Risk Score: {risk_score}")
+    
     
     return {
         "session_id": batch.session_id,
@@ -116,6 +142,23 @@ async def process_telemetry(batch: TelemetryBatch):
 @app.get("/health")
 async def health_check():
     return {"status": "online"}
+
+# --- Real-Time Status Endpoint ---
+
+@app.get("/session/{session_id}")
+async def get_session_status(session_id: str):
+    #O(1) lookup
+    if not redis_client:
+        raise HTTPException(status_code=500, detail="Redis database is offline")
+    
+    data = redis_client.get(f"session:{session_id}")
+    
+    if data:
+        return json.loads(data)
+    
+    #If no data exists yet, default to safe/0
+    return {"risk_score": 0, "status": "safe", "message": "No telemetry received yet"}
+
 
 if __name__ == "__main__":
     import uvicorn
