@@ -3,8 +3,8 @@ import { User, Mail, Phone, Save } from 'lucide-react';
 import { useTelemetry } from '../../context/TelemetryContext';
 
 export const UpdateProfile: React.FC = () => {
-  const { setAction } = useTelemetry();
-  const [email, setEmail] = useState('sarah.j@cognihaven.com');
+  const { setAction, username } = useTelemetry();
+  const [email, setEmail] = useState(`${username?.toLowerCase().replace(/\s+/g, '.')}@cognihaven.com`);
   const [phone, setPhone] = useState('+1 (555) 0123-4567');
 
   useEffect(() => {

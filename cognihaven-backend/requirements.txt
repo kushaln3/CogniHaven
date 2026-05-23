@@ -2,3 +2,7 @@ fastapi
 uvicorn
 pydantic
 numpy
+pandas
+joblib
+sqlalchemy
+redis

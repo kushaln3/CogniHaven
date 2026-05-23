@@ -69,6 +69,10 @@ FEATURE_COLS = [
 class LoginRequest(BaseModel):
     username: str
     password: str
+    otp: Optional[str] = None
+
+class PreLoginRequest(BaseModel):
+    username: str
 
 class KeystrokeMetric(BaseModel):
     dwell_time: float
@@ -121,6 +125,36 @@ def extract_features(batch: TelemetryBatch):
 
 # --- Endpoints ---
 
+@app.post("/pre-login-check")
+async def pre_login_check(req: PreLoginRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.username == req.username).first()
+    
+    risk_score = 0
+    otp_required = False
+    learning_step = 1
+    
+    if user:
+        # Mandatory OTP for first 3 logins (Learning Mode)
+        if user.login_count < 3 or not user.is_enrolled:
+            risk_score = 100 
+            otp_required = True
+            learning_step = user.login_count + 1
+        # Original risk logic for subsequent logins (Admin check only)
+        elif "admin" in user.username.lower():
+            risk_score = 45 
+            otp_required = True
+        else:
+            risk_score = 15
+            otp_required = False
+    
+    return {
+        "username": req.username,
+        "risk_score": risk_score,
+        "otp_required": otp_required,
+        "is_first_login": user.login_count < 3 if user else False,
+        "learning_step": learning_step
+    }
+
 @app.post("/login")
 async def login(req: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == req.username).first()
@@ -129,6 +163,20 @@ async def login(req: LoginRequest, db: Session = Depends(get_db)):
     
     if user.password != req.password:
         raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    # OTP Verification Logic
+    is_learning_mode = user.login_count < 3 or not user.is_enrolled
+    high_risk_flag = "admin" in user.username.lower()
+    
+    if is_learning_mode or high_risk_flag:
+        if not req.otp:
+             raise HTTPException(status_code=403, detail="OTP Required for verification")
+        if req.otp != "123456": # Mock OTP
+             raise HTTPException(status_code=401, detail="Invalid OTP")
+
+    # Increment login count upon successful login
+    user.login_count += 1
+    db.commit()
 
     import uuid
     session_id = str(uuid.uuid4())
@@ -164,11 +212,11 @@ async def enroll_session(batch: TelemetryBatch, db: Session = Depends(get_db)):
         db.add(profile)
     
     profile.dwell_mu = features[0]
-    profile.dwell_sigma = features[0] * 0.2 + 0.01
+    profile.dwell_sigma = max(features[0] * 0.2, 5.0) # Floor of 5ms
     profile.flight_mu = features[2]
-    profile.flight_sigma = features[2] * 0.2 + 0.01
+    profile.flight_sigma = max(features[2] * 0.2, 15.0) # Floor of 15ms
     profile.velocity_mu = features[4]
-    profile.velocity_sigma = features[4] * 0.2 + 0.01
+    profile.velocity_sigma = max(features[4] * 0.2, 0.5) # Floor of 0.5 px/ms
     profile.classification = classification
     
     user = db.query(User).filter(User.id == user_id).first()
@@ -251,21 +299,63 @@ async def process_telemetry(request: Request, batch: TelemetryBatch, db: Session
                 context_risk_spike = 100
                 justifications.append("Identity Wipe Attempt")
 
-    # 4. Hybrid Aggregation
-    if user.is_enrolled:
-        delta_multiplier = 1.0 + (max(0, z_magnitude - 2.0) * 0.5)
-        risk_score = int(min(100, (ml_base_risk + context_risk_spike) * delta_multiplier))
+    # 4. Hybrid Aggregation & Smoothing (EWMA)
+    raw_risk = 0
+    in_learning_mode = user.login_count <= 3
+    
+    if in_learning_mode:
+        # Learning Mode: Bypassing Kicks, purely collecting data
+        raw_risk = 0
+        justifications.append(f"Learning Mode (Baseline Collection: Step {user.login_count}/3)")
+    elif user.is_enrolled:
+        # Reduced sensitivity to small Z-score deviations
+        delta_multiplier = 1.0 + (max(0, z_magnitude - 3.0) * 0.3)
+        raw_risk = int(min(100, (ml_base_risk + context_risk_spike) * delta_multiplier))
     else:
-        risk_score = int(min(100, ml_base_risk + context_risk_spike))
+        raw_risk = int(min(100, ml_base_risk + context_risk_spike))
 
+    # Persistence Screening & Smoothing
+    strike_count = 0
+    smoothed_risk = raw_risk
+    
+    if redis_client and not in_learning_mode:
+        try:
+            prev_data_raw = redis_client.get(f"session_state:{batch.session_id}")
+            if prev_data_raw:
+                prev_data = json.loads(prev_data_raw)
+                prev_score = prev_data.get("risk_score", 0)
+                strike_count = prev_data.get("strike_count", 0)
+                # EWMA: 40% current, 60% historical to dampen spikes
+                smoothed_risk = int((0.4 * raw_risk) + (0.6 * prev_score))
+        except: pass
+
+    # Tolerance Buffer: Require 3 sustained anomaly batches before blocking
     status = "allowed"
-    if risk_score > 65: status = "blocked"
-    elif risk_score > 30: status = "otp_triggered"
+    if smoothed_risk > 65:
+        strike_count += 1
+        if strike_count >= 3:
+            status = "blocked"
+        else:
+            status = "otp_triggered" # Challenge before full block
+            justifications.append(f"Behavioral Anomaly Strike {strike_count}/3")
+    elif smoothed_risk > 30:
+        status = "otp_triggered"
+        strike_count = max(0, strike_count - 1) # Slow recovery
+    else:
+        status = "allowed"
+        strike_count = 0 # Full reset on normal behavior
+
+    risk_score = smoothed_risk
     
     # --- Layer 2: Persistence Screening (Redis Caching) ---
     if redis_client:
         try:
-            redis_payload = {"risk_score": risk_score, "status": status, "username": user.username}
+            redis_payload = {
+                "risk_score": risk_score, 
+                "status": status, 
+                "username": user.username,
+                "strike_count": strike_count
+            }
             redis_client.setex(f"session_state:{batch.session_id}", 3600, json.dumps(redis_payload))
         except redis.RedisError:
             pass
@@ -333,7 +423,11 @@ async def delete_user(req: CreateUserRequest, db: Session = Depends(get_db)):
 async def reset_biometrics(req: CreateUserRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == req.username).first()
     if not user: raise HTTPException(status_code=404, detail="User not found")
+    
+    # Resetting biometrics also triggers Learning Mode on next login
     user.is_enrolled = False
+    user.login_count = 0 
+    
     if user.profile: db.delete(user.profile)
     db.add(AuditLog(user_id=user.id, action="biometrics_reset_by_admin", risk_score=0, status="allowed"))
     db.commit()

@@ -19,6 +19,7 @@ class User(Base):
     username = Column(String, unique=True, index=True)
     password = Column(String)
     is_enrolled = Column(Boolean, default=False)
+    login_count = Column(Integer, default=0)
 
     profile = relationship("BehaviorProfile", back_populates="user", uselist=False)
     logs = relationship("AuditLog", back_populates="user")

@@ -54,33 +54,57 @@ export const LiveSOC: React.FC = () => {
 
   const handleCreateUser = async () => {
     if (!newUsername) return;
-    await fetch('http://localhost:8000/api/admin/create-user', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: newUsername }),
-    });
-    setNewUsername('');
-    fetchData();
+    try {
+      const response = await fetch('http://localhost:8000/api/admin/create-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: newUsername }),
+      });
+      if (response.ok) {
+        alert(`User ${newUsername} created successfully! Default password is 'password'.`);
+        setNewUsername('');
+        fetchData();
+      } else {
+        const error = await response.json();
+        alert(`Error: ${error.detail || 'Failed to create user'}`);
+      }
+    } catch (err) {
+      alert("Could not connect to backend server. Is it running on port 8000?");
+    }
   };
 
   const handleResetBiometrics = async (uname: string) => {
     if (!window.confirm(`Reset biometrics for ${uname}?`)) return;
-    await fetch('http://localhost:8000/api/admin/reset-biometrics', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: uname }),
-    });
-    fetchData();
+    try {
+      const response = await fetch('http://localhost:8000/api/admin/reset-biometrics', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: uname }),
+      });
+      if (response.ok) {
+        alert(`Biometrics reset for ${uname}.`);
+        fetchData();
+      }
+    } catch (err) {
+      alert("Error connecting to backend.");
+    }
   };
 
   const handleDeleteUser = async (uname: string) => {
     if (!window.confirm(`PERMANENTLY DELETE user ${uname}? This will wipe all logs.`)) return;
-    await fetch('http://localhost:8000/api/admin/delete-user', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: uname }),
-    });
-    fetchData();
+    try {
+      const response = await fetch('http://localhost:8000/api/admin/delete-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: uname }),
+      });
+      if (response.ok) {
+        alert(`User ${uname} deleted.`);
+        fetchData();
+      }
+    } catch (err) {
+      alert("Error connecting to backend.");
+    }
   };
 
   const filteredLogs = selectedUser 
