@@ -27,10 +27,10 @@ except Exception as e:
     print(f"WARNING: Could not connect to Redis: {e}. System falling back to degraded mode (No Rate Limiting/Caching).")
     redis_client = None
 
-# Allow CORS for the React frontend
+# Allow CORS for the React frontend (Allowing all for Tunnel/Port Forwarding)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
