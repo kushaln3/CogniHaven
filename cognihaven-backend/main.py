@@ -65,6 +65,16 @@ FEATURE_COLS = [
     'mouse_velocity_mean', 'mouse_velocity_variance'
 ]
 
+# --- State-Transition Matrix (Navigation Pathways) ---
+# Maps: { Current_State: { Next_State: Risk_Penalty } }
+NAV_TRANSITION_MATRIX = {
+    "login": {"dashboard": 0, "settings": 10, "execute_fund_transfer": 35},
+    "dashboard": {"execute_fund_transfer": 0, "settings": 0, "logout": 0},
+    "settings": {"change_pin": 10, "dashboard": 0},
+    "change_pin": {"execute_fund_transfer": 60, "dashboard": 0}, # FATAL FLAG: Changed pin then instantly transferred money
+    "add_beneficiary": {"execute_fund_transfer": 45, "dashboard": 0} # HIGH RISK: Added a new person and instantly sent money
+}
+
 # --- Pydantic Models ---
 
 class LoginRequest(BaseModel):
@@ -381,6 +391,33 @@ async def process_telemetry(request: Request, batch: TelemetryBatch, db: Session
     # 3. Contextual Rule Engine Layer
     context_risk_spike = 0
     is_critical_violation = False
+
+    # --- NEW: Navigation Pathway State Machine ---
+    if redis_client and batch.action and batch.action != "session_sync":
+        path_key = f"nav_path:{batch.session_id}"
+        
+        # Get the previous action from Redis (defaults to login if empty)
+        prev_action = redis_client.lindex(path_key, -1) or "login"
+        current_action = batch.action
+        
+        # Evaluate the transition in our matrix
+        if prev_action in NAV_TRANSITION_MATRIX:
+            transition_penalty = NAV_TRANSITION_MATRIX[prev_action].get(current_action, 0)
+            
+            # If the transition isn't explicitly defined, add a minor "unusual path" penalty
+            if current_action not in NAV_TRANSITION_MATRIX[prev_action]:
+                transition_penalty = 15
+                justifications.append(f"Unusual Navigation Path")
+                
+            if transition_penalty > 0:
+                context_risk_spike += transition_penalty
+                justifications.append(f"High-Risk Pathway ({prev_action} -> {current_action})")
+                if transition_penalty >= 85:
+                    is_critical_violation = True
+        
+        # Save the new current action to the user's Redis history trail
+        redis_client.rpush(path_key, current_action)
+        redis_client.expire(path_key, 3600) # Keep history for 1 hour
     
     if batch.metadata:
         if batch.action == "execute_fund_transfer":
