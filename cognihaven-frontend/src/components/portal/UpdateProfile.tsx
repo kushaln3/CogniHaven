@@ -11,11 +11,27 @@ export const UpdateProfile: React.FC = () => {
     setAction("view_profile_update");
   }, []);
 
-  const handleUpdate = (e: React.FormEvent) => {
+  const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
-    // We assume both are changed for this mock demo to trigger the "Identity Wipe" rule
-    setAction("execute_profile_update", { changes: ["email", "phone"] });
-    alert("Profile information updated.");
+    try {
+      const sessionId = localStorage.getItem('cognihaven_session_id');
+      const response = await fetch('http://localhost:8000/api/user/update-profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          session_id: sessionId,
+          email,
+          phone
+        }),
+      });
+      if (response.ok) {
+        // We trigger both for the demo "Identity Wipe" rule
+        setAction("execute_profile_update", { changes: ["email", "phone"] });
+        alert("Profile updated successfully.");
+      }
+    } catch (err) {
+      alert("Failed to update profile.");
+    }
   };
 
   return (

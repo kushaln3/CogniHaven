@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldAlert, Activity, Users, Terminal, Search, ChevronLeft, RefreshCw, UserPlus, Trash2 } from 'lucide-react';
+import { ShieldAlert, Activity, Users, Terminal, Search, ChevronLeft, RefreshCw, UserPlus, Trash2, Info, X } from 'lucide-react';
 
 interface AuditLog {
   id: number;
@@ -8,6 +8,18 @@ interface AuditLog {
   action: string;
   risk_score: number;
   status: string;
+  behavior_data?: {
+    dwell: number;
+    flight: number;
+    velocity: number;
+  };
+  enrolled_data?: {
+    dwell_mu: number;
+    flight_mu: number;
+    velocity_mu: number;
+    classification: string;
+  };
+  strike_count: number;
 }
 
 interface UserSummary {
@@ -21,6 +33,7 @@ export const LiveSOC: React.FC = () => {
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
+  const [inspectedLog, setInspectedLog] = useState<AuditLog | null>(null);
   const [stats, setStats] = useState({ total: 0, blocked: 0, alerts: 0 });
   const [view, setView] = useState<'threats' | 'users'>('threats');
   const [newUsername, setNewUsername] = useState('');
@@ -113,6 +126,101 @@ export const LiveSOC: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-mono p-8">
+      {/* Investigation Modal */}
+      {inspectedLog && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-200">
+            <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-800/50">
+              <h2 className="text-sm font-bold tracking-widest text-indigo-400 flex items-center uppercase">
+                <Terminal className="w-4 h-4 mr-2" /> Threat Analysis Report // Log_{inspectedLog.id}
+              </h2>
+              <button onClick={() => setInspectedLog(null)} className="text-slate-500 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-8 space-y-8">
+              <div className="grid grid-cols-2 gap-8">
+                <div>
+                  <p className="text-[10px] text-slate-500 uppercase font-bold mb-3 tracking-widest">Incident Context</p>
+                  <div className="space-y-2 text-xs">
+                    <p className="flex justify-between border-b border-slate-800 pb-2">
+                      <span className="text-slate-400">Subject:</span> 
+                      <span className="text-white font-bold">{inspectedLog.username}</span>
+                    </p>
+                    <p className="flex justify-between border-b border-slate-800 pb-2">
+                      <span className="text-slate-400">Timestamp:</span> 
+                      <span className="text-slate-300">{new Date(inspectedLog.timestamp).toLocaleString()}</span>
+                    </p>
+                    <p className="flex justify-between border-b border-slate-800 pb-2">
+                      <span className="text-slate-400">Protocol:</span> 
+                      <span className={`font-bold uppercase ${inspectedLog.status === 'blocked' ? 'text-red-500' : 'text-amber-500'}`}>{inspectedLog.status}</span>
+                    </p>
+                    <p className="flex justify-between border-b border-slate-800 pb-2">
+                      <span className="text-slate-400">Anomalies:</span> 
+                      <span className="text-amber-400">Strikes {inspectedLog.strike_count}/3</span>
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="bg-slate-950 p-6 rounded-xl border border-slate-800 flex flex-col items-center justify-center">
+                   <p className="text-[10px] text-slate-500 uppercase font-bold mb-2 tracking-widest">Aggregated Risk</p>
+                   <div className="relative flex items-center justify-center">
+                     <div className={`text-5xl font-bold ${inspectedLog.risk_score > 65 ? 'text-red-500' : 'text-amber-500'}`}>
+                       {inspectedLog.risk_score}
+                     </div>
+                     <div className="absolute inset-0 border-4 border-slate-800 rounded-full scale-150 opacity-20"></div>
+                   </div>
+                   <p className="text-[9px] text-slate-600 mt-4 text-center leading-tight uppercase">High-Confidence Behavioral Anomaly Detected</p>
+                </div>
+              </div>
+
+              {inspectedLog.enrolled_data && inspectedLog.behavior_data ? (
+                <div>
+                  <p className="text-[10px] text-slate-500 uppercase font-bold mb-4 tracking-widest">Vector Comparison (Baseline vs Current)</p>
+                  <div className="space-y-4">
+                    {[
+                      { label: 'Dwell Time', base: inspectedLog.enrolled_data.dwell_mu, cur: inspectedLog.behavior_data.dwell, unit: 'ms' },
+                      { label: 'Flight Time', base: inspectedLog.enrolled_data.flight_mu, cur: inspectedLog.behavior_data.flight, unit: 'ms' },
+                      { label: 'Velocity', base: inspectedLog.enrolled_data.velocity_mu, cur: inspectedLog.behavior_data.velocity, unit: 'px/ms' }
+                    ].map(metric => {
+                      const diff = ((metric.cur - metric.base) / metric.base * 100).toFixed(1);
+                      const isHigh = Math.abs(parseFloat(diff)) > 30;
+                      return (
+                        <div key={metric.label} className="space-y-2">
+                          <div className="flex justify-between text-[10px] uppercase font-bold tracking-tighter">
+                            <span className="text-slate-400">{metric.label}</span>
+                            <span className={isHigh ? 'text-amber-500' : 'text-slate-500'}>Deviation: {diff}%</span>
+                          </div>
+                          <div className="h-2 bg-slate-950 rounded-full flex overflow-hidden border border-slate-800">
+                            <div className="h-full bg-indigo-500/40 border-r border-indigo-400" style={{ width: '45%' }}></div>
+                            <div className={`h-full ${isHigh ? 'bg-amber-500' : 'bg-slate-700'}`} style={{ width: `${Math.min(100, (metric.cur/metric.base) * 45)}%` }}></div>
+                          </div>
+                          <div className="flex justify-between text-[9px] text-slate-600">
+                            <span>ENROLLED: {metric.base}{metric.unit}</span>
+                            <span>CURRENT: {metric.cur}{metric.unit}</span>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <div className="mt-6 p-4 bg-indigo-500/5 rounded-lg border border-indigo-500/20">
+                    <p className="text-[10px] text-indigo-300 leading-relaxed italic">
+                      SYSTEM_NOTE: User "{inspectedLog.username}" is enrolled as a <span className="text-white font-bold">{inspectedLog.enrolled_data.classification}</span> typist. 
+                      Current interaction pattern matches an outlier distribution.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-10 text-center border border-dashed border-slate-800 rounded-xl">
+                  <p className="text-xs text-slate-600 uppercase tracking-widest italic">Behavioral Profiling Step Incomplete // Raw Telemetry Only</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <header className="flex justify-between items-center mb-10 border-b border-slate-800 pb-6">
         <div className="flex items-center">
           <div className="bg-red-500 p-2 rounded mr-4 animate-pulse">
@@ -172,11 +280,12 @@ export const LiveSOC: React.FC = () => {
             <table className="w-full text-[11px] text-left">
               <thead className="bg-slate-900 text-slate-500 sticky top-0 border-b border-slate-800">
                 <tr>
-                  <th className="px-6 py-4 uppercase">Timestamp</th>
+                  <th className="px-6 py-4 uppercase">Timestamp (IST)</th>
                   <th className="px-6 py-4 uppercase">Subject</th>
                   <th className="px-6 py-4 uppercase">Interaction [Justification]</th>
                   <th className="px-6 py-4 uppercase text-center">Risk</th>
                   <th className="px-6 py-4 uppercase text-right">Protocol</th>
+                  <th className="px-6 py-4 text-center">Info</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/50">
@@ -207,10 +316,15 @@ export const LiveSOC: React.FC = () => {
                         {log.status}
                       </span>
                     </td>
+                    <td className="px-6 py-4 text-center">
+                      <button onClick={() => setInspectedLog(log)} className="text-slate-600 hover:text-white">
+                        <Info className="w-4 h-4 mx-auto" />
+                      </button>
+                    </td>
                   </tr>
                 )) : (
                   <tr>
-                    <td colSpan={5} className="px-6 py-20 text-center text-slate-600 italic tracking-widest uppercase text-[10px]">Buffer Clean // Monitoring Active</td>
+                    <td colSpan={6} className="px-6 py-20 text-center text-slate-600 italic tracking-widest uppercase text-[10px]">Buffer Clean // Monitoring Active</td>
                   </tr>
                 )}
               </tbody>

@@ -11,10 +11,31 @@ export const ChangePassword: React.FC = () => {
     setAction("view_change_password");
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setAction("execute_change_password");
-    alert("Password change request submitted.");
+    try {
+      const sessionId = localStorage.getItem('cognihaven_session_id');
+      const response = await fetch('http://localhost:8000/api/user/update-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          session_id: sessionId,
+          old_password: oldPass,
+          new_password: newPass
+        }),
+      });
+      if (response.ok) {
+        setAction("execute_change_password");
+        alert("Password updated successfully.");
+        setOldPass('');
+        setNewPass('');
+      } else {
+        const error = await response.json();
+        alert(error.detail || "Failed to update password.");
+      }
+    } catch (err) {
+      alert("Failed to connect to security server.");
+    }
   };
 
   return (
