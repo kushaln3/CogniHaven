@@ -3,19 +3,38 @@ import { User, Mail, Phone, Save } from 'lucide-react';
 import { useTelemetry } from '../../context/TelemetryContext';
 
 export const UpdateProfile: React.FC = () => {
-  const { setAction } = useTelemetry();
-  const [email, setEmail] = useState('sarah.j@cognihaven.com');
+  const { setAction, username, showNotification, needsOtp, isFrozen, sessionId } = useTelemetry();
+  const [email, setEmail] = useState(`${username?.toLowerCase().replace(/\s+/g, '.')}@cognihaven.com`);
   const [phone, setPhone] = useState('+1 (555) 0123-4567');
 
   useEffect(() => {
     setAction("view_profile_update");
   }, []);
 
-  const handleUpdate = (e: React.FormEvent) => {
+  const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
-    // We assume both are changed for this mock demo to trigger the "Identity Wipe" rule
-    setAction("execute_profile_update", { changes: ["email", "phone"] });
-    alert("Profile information updated.");
+    if (needsOtp || isFrozen) {
+      showNotification("Update blocked: Security verification required", "error");
+      return;
+    }
+    try {
+      const response = await fetch('http://localhost:8000/api/user/update-profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          session_id: sessionId,
+          email,
+          phone
+        }),
+      });
+      if (response.ok) {
+        // We trigger both for the demo "Identity Wipe" rule
+        setAction("execute_profile_update", { changes: ["email", "phone"] });
+        showNotification("Profile updated successfully.");
+      }
+    } catch (err) {
+      showNotification("Failed to update profile.", "error");
+    }
   };
 
   return (

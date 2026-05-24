@@ -3,7 +3,7 @@ import { Lock, RefreshCw } from 'lucide-react';
 import { useTelemetry } from '../../context/TelemetryContext';
 
 export const ChangePassword: React.FC = () => {
-  const { setAction } = useTelemetry();
+  const { setAction, showNotification, needsOtp, isFrozen, sessionId } = useTelemetry();
   const [oldPass, setOldPass] = useState('');
   const [newPass, setNewPass] = useState('');
 
@@ -11,10 +11,34 @@ export const ChangePassword: React.FC = () => {
     setAction("view_change_password");
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setAction("execute_change_password");
-    alert("Password change request submitted.");
+    if (needsOtp || isFrozen) {
+      showNotification("Update blocked: Security verification required", "error");
+      return;
+    }
+    try {
+      const response = await fetch('http://localhost:8000/api/user/update-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          session_id: sessionId,
+          old_password: oldPass,
+          new_password: newPass
+        }),
+      });
+      if (response.ok) {
+        setAction("execute_change_password");
+        showNotification("Password updated successfully.");
+        setOldPass('');
+        setNewPass('');
+      } else {
+        const error = await response.json();
+        showNotification(error.detail || "Failed to update password.", "error");
+      }
+    } catch (err) {
+      showNotification("Failed to connect to security server.", "error");
+    }
   };
 
   return (

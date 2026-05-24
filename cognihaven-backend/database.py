@@ -19,6 +19,7 @@ class User(Base):
     username = Column(String, unique=True, index=True)
     password = Column(String)
     is_enrolled = Column(Boolean, default=False)
+    login_count = Column(Integer, default=0)
 
     profile = relationship("BehaviorProfile", back_populates="user", uselist=False)
     logs = relationship("AuditLog", back_populates="user")
@@ -38,16 +39,26 @@ class BehaviorProfile(Base):
     classification = Column(String) # 'Slow', 'Medium', 'Fast'
 
     user = relationship("User", back_populates="profile")
+import datetime
+
+def get_ist():
+    # IST is UTC+5:30
+    return datetime.datetime.utcnow() + datetime.timedelta(hours=5, minutes=30)
 
 class AuditLog(Base):
     __tablename__ = "audit_logs"
 
     id = Column(Integer, primary_key=True, index=True)
-    timestamp = Column(DateTime, default=datetime.datetime.utcnow)
+    timestamp = Column(DateTime, default=get_ist)
     user_id = Column(Integer, ForeignKey("users.id"))
     action = Column(String)
     risk_score = Column(Integer)
     status = Column(String) # 'allowed', 'otp_triggered', 'blocked'
+
+    # Detailed behavioral insights
+    behavior_data = Column(String, nullable=True) # JSON string of current batch features
+    enrolled_data = Column(String, nullable=True) # JSON string of user baseline
+    strike_count = Column(Integer, default=0)
 
     user = relationship("User", back_populates="logs")
 
