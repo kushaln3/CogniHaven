@@ -8,27 +8,27 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        target: 'https://7k2k6kcj-8000.inc1.devtunnels.ms',
         changeOrigin: true,
       },
       '/telemetry-stream': {
-        target: 'http://localhost:8000',
+        target: 'https://7k2k6kcj-8000.inc1.devtunnels.ms',
         changeOrigin: true,
       },
       '/enroll-session': {
-        target: 'http://localhost:8000',
+        target: 'https://7k2k6kcj-8000.inc1.devtunnels.ms',
         changeOrigin: true,
       },
       '/pre-login-check': {
-        target: 'http://localhost:8000',
+        target: 'https://7k2k6kcj-8000.inc1.devtunnels.ms',
         changeOrigin: true,
       },
       '/login': {
-        target: 'http://localhost:8000',
+        target: 'https://7k2k6kcj-8000.inc1.devtunnels.ms',
         changeOrigin: true,
       },
       '/health': {
-        target: 'http://localhost:8000',
+        target: 'https://7k2k6kcj-8000.inc1.devtunnels.ms',
         changeOrigin: true,
       }
     }
