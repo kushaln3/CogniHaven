@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { TelemetryProvider, useTelemetry } from './context/TelemetryContext';
+import { TelemetryProvider } from './context/TelemetryContext';
+import { useTelemetry } from './context/useTelemetry';
 import { Login } from './components/Login';
 import { Dashboard } from './components/Dashboard';
 import { SessionFrozen } from './components/SessionFrozen';

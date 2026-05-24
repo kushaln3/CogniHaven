@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Fingerprint, Smartphone, ShieldCheck, Info, AlertTriangle, UserCheck, ShieldAlert } from 'lucide-react';
-import { useTelemetry } from '../context/TelemetryContext';
+import { Fingerprint, ShieldCheck, Info, AlertTriangle, UserCheck, ShieldAlert } from 'lucide-react';
+import { useTelemetry } from '../context/useTelemetry';
 
 export const OtpModal: React.FC = () => {
   const [code, setCode] = useState(['', '', '', '', '', '']);

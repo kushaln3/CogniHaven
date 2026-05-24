@@ -1,8 +1,9 @@
-import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { extractRawMetrics, type KeystrokeRawEvent, type MouseRawEvent } from '../utils/telemetry';
+import { TelemetryContext } from './TelemetryContextInstance';
 
-interface TelemetryContextType {
+export interface TelemetryContextType {
   sessionId: string;
   setSessionId: (id: string, isEnrolled?: boolean) => void;
   riskScore: number;
@@ -15,14 +16,12 @@ interface TelemetryContextType {
   enrollSession: () => Promise<void>;
   isCalibrated: boolean;
   setIsCalibrated: (val: boolean) => void;
-  setAction: (action: string, metadata?: any) => void;
+  setAction: (action: string, metadata?: Record<string, unknown>) => void;
   logout: () => void;
   username: string | null;
   setUsername: (name: string | null) => void;
   showNotification: (message: string, type?: 'success' | 'error') => void;
 }
-
-const TelemetryContext = createContext<TelemetryContextType | undefined>(undefined);
 
 export const TelemetryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [sessionId, setSessionIdState] = useState(uuidv4());
@@ -37,9 +36,13 @@ export const TelemetryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const keystrokesRef = useRef<KeystrokeRawEvent[]>([]);
   const mouseMovementsRef = useRef<MouseRawEvent[]>([]);
-  const lastBatchTimeRef = useRef<number>(Date.now());
+  const lastBatchTimeRef = useRef<number>(0);
   const currentActionRef = useRef<string>("session_sync");
-  const actionMetadataRef = useRef<any>(null);
+  const actionMetadataRef = useRef<Record<string, unknown> | null>(null);
+
+  useEffect(() => {
+    lastBatchTimeRef.current = Date.now();
+  }, []);
 
   const showNotification = (message: string, type: 'success' | 'error' = 'success') => {
     setNotification({ message, type });
@@ -54,7 +57,7 @@ export const TelemetryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
 
-  const setAction = (action: string, metadata?: any) => {
+  const setAction = (action: string, metadata?: Record<string, unknown>) => {
     // Prevent setting new actions if security challenges are active or session is blocked
     if (isFrozen || needsOtp) return;
     currentActionRef.current = action;
@@ -261,10 +264,4 @@ export const TelemetryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       )}
     </TelemetryContext.Provider>
   );
-};
-
-export const useTelemetry = () => {
-  const context = useContext(TelemetryContext);
-  if (!context) throw new Error('useTelemetry must be used within TelemetryProvider');
-  return context;
 };
