@@ -3,7 +3,7 @@ import { Lock, RefreshCw } from 'lucide-react';
 import { useTelemetry } from '../../context/TelemetryContext';
 
 export const ChangePassword: React.FC = () => {
-  const { setAction } = useTelemetry();
+  const { setAction, showNotification, needsOtp, isFrozen, sessionId } = useTelemetry();
   const [oldPass, setOldPass] = useState('');
   const [newPass, setNewPass] = useState('');
 
@@ -13,8 +13,11 @@ export const ChangePassword: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (needsOtp || isFrozen) {
+      showNotification("Update blocked: Security verification required", "error");
+      return;
+    }
     try {
-      const sessionId = localStorage.getItem('cognihaven_session_id');
       const response = await fetch('http://localhost:8000/api/user/update-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -26,15 +29,15 @@ export const ChangePassword: React.FC = () => {
       });
       if (response.ok) {
         setAction("execute_change_password");
-        alert("Password updated successfully.");
+        showNotification("Password updated successfully.");
         setOldPass('');
         setNewPass('');
       } else {
         const error = await response.json();
-        alert(error.detail || "Failed to update password.");
+        showNotification(error.detail || "Failed to update password.", "error");
       }
     } catch (err) {
-      alert("Failed to connect to security server.");
+      showNotification("Failed to connect to security server.", "error");
     }
   };
 

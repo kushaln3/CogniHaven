@@ -47,6 +47,7 @@ export const CalibrationModal: React.FC<CalibrationModalProps> = ({ onComplete }
               placeholder="Start typing..."
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
+              onPaste={(e) => e.preventDefault()}
             />
             <Keyboard className="absolute right-4 top-4.5 w-5 h-5 text-slate-300" />
           </div>

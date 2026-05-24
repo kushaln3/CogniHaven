@@ -3,7 +3,7 @@ import { Landmark, ChevronRight } from 'lucide-react';
 import { useTelemetry } from '../../context/TelemetryContext';
 
 export const LoanApplication: React.FC = () => {
-  const { setAction } = useTelemetry();
+  const { setAction, showNotification, needsOtp, isFrozen } = useTelemetry();
   const [amount, setAmount] = useState(5000);
   const [reason, setReason] = useState('');
 
@@ -13,8 +13,13 @@ export const LoanApplication: React.FC = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (needsOtp || isFrozen) {
+      showNotification("Application blocked: Security verification required", "error");
+      return;
+    }
     setAction("execute_loan_application", { amount });
-    alert("Loan application submitted for review.");
+    showNotification("Loan application submitted for review.");
+    setReason('');
   };
 
   return (

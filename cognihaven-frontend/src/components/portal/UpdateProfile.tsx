@@ -3,7 +3,7 @@ import { User, Mail, Phone, Save } from 'lucide-react';
 import { useTelemetry } from '../../context/TelemetryContext';
 
 export const UpdateProfile: React.FC = () => {
-  const { setAction, username } = useTelemetry();
+  const { setAction, username, showNotification, needsOtp, isFrozen, sessionId } = useTelemetry();
   const [email, setEmail] = useState(`${username?.toLowerCase().replace(/\s+/g, '.')}@cognihaven.com`);
   const [phone, setPhone] = useState('+1 (555) 0123-4567');
 
@@ -13,8 +13,11 @@ export const UpdateProfile: React.FC = () => {
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (needsOtp || isFrozen) {
+      showNotification("Update blocked: Security verification required", "error");
+      return;
+    }
     try {
-      const sessionId = localStorage.getItem('cognihaven_session_id');
       const response = await fetch('http://localhost:8000/api/user/update-profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -27,10 +30,10 @@ export const UpdateProfile: React.FC = () => {
       if (response.ok) {
         // We trigger both for the demo "Identity Wipe" rule
         setAction("execute_profile_update", { changes: ["email", "phone"] });
-        alert("Profile updated successfully.");
+        showNotification("Profile updated successfully.");
       }
     } catch (err) {
-      alert("Failed to update profile.");
+      showNotification("Failed to update profile.", "error");
     }
   };
 

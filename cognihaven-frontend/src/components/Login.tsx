@@ -12,7 +12,7 @@ export const Login: React.FC = () => {
   const [learningStep, setLearningStep] = useState(1);
   const [checkingRisk, setCheckingRisk] = useState(false);
   const navigate = useNavigate();
-  const { setSessionId, setUsername, logout } = useTelemetry();
+  const { setSessionId, setUsername, logout, showNotification } = useTelemetry();
 
   const handleUsernameBlur = async () => {
     if (!usernameInput) return;
@@ -57,7 +57,7 @@ export const Login: React.FC = () => {
         navigate('/dashboard');
       } else {
         const errorData = await response.json();
-        alert(errorData.detail || "Login failed");
+        showNotification(errorData.detail || "Login failed", "error");
       }
     } catch (error) {
       console.error("Login failed:", error);

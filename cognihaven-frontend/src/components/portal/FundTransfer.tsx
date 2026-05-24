@@ -3,7 +3,7 @@ import { Send, DollarSign } from 'lucide-react';
 import { useTelemetry } from '../../context/TelemetryContext';
 
 export const FundTransfer: React.FC = () => {
-  const { setAction } = useTelemetry();
+  const { setAction, showNotification, needsOtp, isFrozen } = useTelemetry();
   const [target, setTarget] = useState('');
   const [amount, setAmount] = useState('');
 
@@ -13,8 +13,14 @@ export const FundTransfer: React.FC = () => {
 
   const handleTransfer = (e: React.FormEvent) => {
     e.preventDefault();
+    if (needsOtp || isFrozen) {
+      showNotification("Transaction blocked: Security verification required", "error");
+      return;
+    }
     setAction("execute_fund_transfer", { amount: parseFloat(amount) });
-    alert(`Transfer of $${amount} to ${target} initiated.`);
+    showNotification(`Transfer of $${amount} to ${target} initiated.`);
+    setTarget('');
+    setAmount('');
   };
 
   return (

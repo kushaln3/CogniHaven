@@ -166,7 +166,19 @@ async def pre_login_check(req: PreLoginRequest, db: Session = Depends(get_db)):
     }
 
 @app.post("/login")
-async def login(req: LoginRequest, db: Session = Depends(get_db)):
+async def login(request: Request, req: LoginRequest, db: Session = Depends(get_db)):
+    # --- Layer 1: Perimeter Screening (Login Rate Limiting) ---
+    if redis_client:
+        try:
+            client_ip = request.client.host
+            login_attempts = redis_client.incr(f"login_rate:{client_ip}")
+            if login_attempts == 1:
+                redis_client.expire(f"login_rate:{client_ip}", 60) # 1-minute window
+            if login_attempts > 5: # Strict limit for login
+                raise HTTPException(status_code=429, detail="Layer 1 Block: Too many login attempts. Please wait 1 minute.")
+        except redis.RedisError:
+            pass
+
     user = db.query(User).filter(User.username == req.username).first()
     if not user:
         raise HTTPException(status_code=401, detail="User not found. Contact Admin for provisioning.")
@@ -399,8 +411,8 @@ async def process_telemetry(request: Request, batch: TelemetryBatch, db: Session
             redis_client.setex(f"session_state:{batch.session_id}", 3600, json.dumps(redis_payload))
         except redis.RedisError:
             pass
-
-    action_label = "session_sync" if batch.action == "heartbeat" else batch.action
+    # Log to Audit Table
+    action_label = batch.action # Now defaults to session_sync from frontend
     action_str = f"{action_label}"
     if justifications: action_str += f" [{', '.join(justifications[:2])}]"
     
