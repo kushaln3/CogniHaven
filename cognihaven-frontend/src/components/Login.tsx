@@ -18,7 +18,7 @@ export const Login: React.FC = () => {
     if (!usernameInput) return;
     setCheckingRisk(true);
     try {
-      const response = await fetch('https://7k2k6kcj-8000.inc1.devtunnels.ms/pre-login-check', {
+      const response = await fetch('/pre-login-check', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: usernameInput }),
@@ -40,7 +40,7 @@ export const Login: React.FC = () => {
     e.preventDefault();
     logout(); // Ensure previous tracking stops
     try {
-      const response = await fetch('https://7k2k6kcj-8000.inc1.devtunnels.ms/login', {
+      const response = await fetch('/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 

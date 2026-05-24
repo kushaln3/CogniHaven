@@ -1,22 +1,28 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { FileText, Download } from 'lucide-react';
 import { useTelemetry } from '../../context/TelemetryContext';
 
 export const ViewStatement: React.FC = () => {
-  const { setAction } = useTelemetry();
+  const { setAction, sessionId } = useTelemetry();
+  const [transactions, setTransactions] = useState<any[]>([]);
 
   useEffect(() => {
     setAction("view_statement_history");
-  }, []);
-
-  const transactions = [
-    { date: 'May 22, 2026', desc: 'Amazon.com', amount: -89.99, status: 'Completed' },
-    { date: 'May 20, 2026', desc: 'Salary Deposit', amount: 4500.00, status: 'Completed' },
-    { date: 'May 19, 2026', desc: 'Starbucks Coffee', amount: -5.50, status: 'Completed' },
-    { date: 'May 15, 2026', desc: 'Rent Payment', amount: -1200.00, status: 'Completed' },
-    { date: 'May 10, 2026', desc: 'Apple Store', amount: -1299.00, status: 'Completed' },
-    { date: 'May 08, 2026', desc: 'Uber Trip', amount: -24.50, status: 'Completed' },
-  ];
+    
+    const fetchTransactions = async () => {
+      try {
+        const res = await fetch(`/api/user/transactions?session_id=${sessionId}`);
+        if (res.ok) {
+          const data = await res.json();
+          setTransactions(data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch transactions:', err);
+      }
+    };
+    
+    fetchTransactions();
+  }, [sessionId]);
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden max-w-4xl mx-auto">
@@ -41,18 +47,26 @@ export const ViewStatement: React.FC = () => {
           <tbody className="divide-y divide-slate-50">
             {transactions.map((t, i) => (
               <tr key={i} className="hover:bg-slate-50/50 transition-colors">
-                <td className="px-6 py-4 text-sm text-slate-600 font-mono">{t.date}</td>
-                <td className="px-6 py-4 text-sm font-semibold text-slate-800">{t.desc}</td>
+                <td className="px-6 py-4 text-sm text-slate-600 font-mono">{new Date(t.timestamp).toLocaleDateString()}</td>
+                <td className="px-6 py-4 text-sm font-semibold text-slate-800">{t.recipient || t.description}</td>
                 <td className="px-6 py-4">
-                  <span className="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-0.5 rounded-full">
-                    {t.status}
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    t.status === 'completed' ? 'bg-green-100 text-green-700' : 
+                    t.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'
+                  }`}>
+                    {t.status.toUpperCase()}
                   </span>
                 </td>
                 <td className={`px-6 py-4 text-sm font-bold text-right ${t.amount > 0 ? 'text-green-600' : 'text-slate-800'}`}>
-                  {t.amount > 0 ? '+' : ''}{t.amount.toFixed(2)}
+                  {t.amount > 0 ? '+' : ''}₹{Math.abs(t.amount).toLocaleString()}
                 </td>
               </tr>
             ))}
+            {transactions.length === 0 && (
+              <tr>
+                <td colSpan={4} className="px-6 py-10 text-center text-slate-400 italic">No transaction history found</td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

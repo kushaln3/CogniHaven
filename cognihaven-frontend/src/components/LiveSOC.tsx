@@ -46,7 +46,7 @@ export const LiveSOC: React.FC = () => {
 
   const fetchData = async () => {
     try {
-      const logRes = await fetch('https://7k2k6kcj-8000.inc1.devtunnels.ms/api/admin/logs');
+      const logRes = await fetch('/api/admin/logs');
       if (logRes.ok) {
         const data = await logRes.json();
         setLogs(data);
@@ -55,7 +55,7 @@ export const LiveSOC: React.FC = () => {
         setStats({ total: data.length, blocked, alerts });
       }
 
-      const userRes = await fetch('https://7k2k6kcj-8000.inc1.devtunnels.ms/api/admin/users');
+      const userRes = await fetch('/api/admin/users');
       if (userRes.ok) {
         const userData = await userRes.json();
         setUsers(userData);
@@ -74,7 +74,7 @@ export const LiveSOC: React.FC = () => {
   const handleCreateUser = async () => {
     if (!newUsername) return;
     try {
-      const response = await fetch('https://7k2k6kcj-8000.inc1.devtunnels.ms/api/admin/create-user', {
+      const response = await fetch('/api/admin/create-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: newUsername }),
@@ -95,7 +95,7 @@ export const LiveSOC: React.FC = () => {
   const handleResetBiometrics = async (uname: string) => {
     if (!window.confirm(`Reset biometrics for ${uname}?`)) return;
     try {
-      const response = await fetch('https://7k2k6kcj-8000.inc1.devtunnels.ms/api/admin/reset-biometrics', {
+      const response = await fetch('/api/admin/reset-biometrics', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: uname }),
@@ -112,7 +112,7 @@ export const LiveSOC: React.FC = () => {
   const handleDeleteUser = async (uname: string) => {
     if (!window.confirm(`PERMANENTLY DELETE user ${uname}?`)) return;
     try {
-      const response = await fetch('https://7k2k6kcj-8000.inc1.devtunnels.ms/api/admin/delete-user', {
+      const response = await fetch('/api/admin/delete-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: uname }),

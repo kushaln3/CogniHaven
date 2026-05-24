@@ -10,10 +10,29 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional, Dict
 from sqlalchemy.orm import Session
-from database import SessionLocal, User, BehaviorProfile, AuditLog, init_db
+from database import SessionLocal, User, BehaviorProfile, AuditLog, Transaction, RawTelemetry, init_db
+
+# ...
+
+class AccountResponse(BaseModel):
+    username: str
+    current_balance: float
+    is_enrolled: bool
+
+class TransactionResponse(BaseModel):
+    id: int
+    amount: float
+    recipient: str
+    status: str
+    timestamp: str
+    description: str
 
 # Initialize Database
 init_db()
+
+# --- Security Configuration ---
+# Transfers exceeding this % of total balance will trigger a Critical Violation (OTP)
+TRANSFER_PERCENTAGE_THRESHOLD = 70.0
 
 app = FastAPI()
 
@@ -47,9 +66,12 @@ def get_db():
 # --- In-memory Session Mapping ---
 # session_id -> user_id
 SESSIONS: Dict[str, int] = {}
+# session_id -> {risk_score, status, strike_count, last_verified}
+SESSION_STATE: Dict[str, Dict] = {}
 
 # --- Load ML Model ---
-MODEL_PATH = os.path.join("..", "ml_engine", "isolation_forest.pkl")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH = os.path.join(BASE_DIR, "..", "ml_engine", "isolation_forest.pkl")
 try:
     model = joblib.load(MODEL_PATH)
     print(f"STATUS: ML Model loaded successfully (Brain Active)")
@@ -63,6 +85,45 @@ FEATURE_COLS = [
     'flight_mean', 'flight_variance', 
     'mouse_velocity_mean', 'mouse_velocity_variance'
 ]
+
+# --- Helper Functions ---
+
+def get_session_state(session_id: str):
+    if redis_client:
+        try:
+            data = redis_client.get(f"session_state:{session_id}")
+            if data: return json.loads(data)
+        except: pass
+    return SESSION_STATE.get(session_id)
+
+def set_session_state(session_id: str, state: Dict):
+    if redis_client:
+        try:
+            redis_client.setex(f"session_state:{session_id}", 3600, json.dumps(state))
+        except: pass
+    SESSION_STATE[session_id] = state
+
+def delete_session_state(session_id: str):
+    if redis_client:
+        try:
+            redis_client.delete(f"session_state:{session_id}")
+        except: pass
+    if session_id in SESSION_STATE:
+        # Keep verified status if it exists, just reset risk
+        old_state = SESSION_STATE[session_id]
+        SESSION_STATE[session_id] = {
+            "risk_score": 0,
+            "status": "allowed",
+            "strike_count": 0,
+            "last_verified": datetime.datetime.utcnow().timestamp()
+        }
+    else:
+        SESSION_STATE[session_id] = {
+            "risk_score": 0,
+            "status": "allowed",
+            "strike_count": 0,
+            "last_verified": datetime.datetime.utcnow().timestamp()
+        }
 
 # --- Pydantic Models ---
 
@@ -105,6 +166,10 @@ class UpdatePasswordRequest(BaseModel):
     old_password: str
     new_password: str
 
+class VerifyOtpRequest(BaseModel):
+    session_id: str
+    otp: str
+
 # --- Feature Extraction ---
 
 def extract_features(batch: TelemetryBatch):
@@ -134,6 +199,31 @@ def extract_features(batch: TelemetryBatch):
     ]
 
 # --- Endpoints ---
+
+@app.get("/api/user/account")
+async def get_account(session_id: str, db: Session = Depends(get_db)):
+    user_id = SESSIONS.get(session_id)
+    if not user_id: raise HTTPException(status_code=401, detail="Invalid session")
+    user = db.query(User).filter(User.id == user_id).first()
+    return {
+        "username": user.username,
+        "current_balance": user.current_balance,
+        "is_enrolled": user.is_enrolled
+    }
+
+@app.get("/api/user/transactions")
+async def get_transactions(session_id: str, db: Session = Depends(get_db)):
+    user_id = SESSIONS.get(session_id)
+    if not user_id: raise HTTPException(status_code=401, detail="Invalid session")
+    txs = db.query(Transaction).filter(Transaction.user_id == user_id).order_by(Transaction.timestamp.desc()).all()
+    return [{
+        "id": tx.id,
+        "amount": tx.amount,
+        "recipient": tx.recipient,
+        "status": tx.status,
+        "timestamp": tx.timestamp.isoformat(),
+        "description": tx.description
+    } for tx in txs]
 
 @app.post("/pre-login-check")
 async def pre_login_check(req: PreLoginRequest, db: Session = Depends(get_db)):
@@ -291,6 +381,22 @@ async def process_telemetry(request: Request, batch: TelemetryBatch, db: Session
     
     user = db.query(User).filter(User.id == user_id).first()
     raw_features = extract_features(batch)
+    
+    # --- Capture the Data: Store raw telemetry (Learning and Anomaly) ---
+    # We store it as unverified (is_verified=False)
+    raw_rec = RawTelemetry(
+        user_id=user.id,
+        dwell_mean=raw_features[0],
+        dwell_variance=raw_features[1],
+        flight_mean=raw_features[2],
+        flight_variance=raw_features[3],
+        velocity_mean=raw_features[4],
+        velocity_variance=raw_features[5],
+        is_verified=False
+    )
+    db.add(raw_rec)
+    db.commit()
+
     justifications = []
     
     behavior_dict = {
@@ -344,13 +450,21 @@ async def process_telemetry(request: Request, batch: TelemetryBatch, db: Session
     if batch.metadata:
         if batch.action == "execute_fund_transfer":
             amount = float(batch.metadata.get("amount", 0))
-            if amount > 50000: 
+            # Percentage-Based Anomaly Detection
+            if user.current_balance > 0:
+                transfer_percentage = (amount / user.current_balance) * 100
+                if transfer_percentage > TRANSFER_PERCENTAGE_THRESHOLD:
+                    context_risk_spike = 100
+                    is_critical_violation = True
+                    justifications.append(f"HIGH RISK: Large Balance Drain ({int(transfer_percentage)}%)")
+                elif transfer_percentage > 20: # Secondary caution threshold
+                    context_risk_spike += 40
+                    justifications.append(f"High-Value Transfer ({int(transfer_percentage)}%)")
+            else:
+                # If balance is 0 or less, any transfer attempt is a critical violation
                 context_risk_spike = 100
                 is_critical_violation = True
-                justifications.append(f"HIGH RISK: Extreme Transfer (${amount})")
-            elif amount > 10000:
-                context_risk_spike += 40
-                justifications.append(f"High-Value Transfer (${amount})")
+                justifications.append("CRITICAL: Transfer with Zero Balance")
         
         if batch.action == "execute_loan_application":
             amount = float(batch.metadata.get("amount", 0))
@@ -385,17 +499,27 @@ async def process_telemetry(request: Request, batch: TelemetryBatch, db: Session
     # Persistence Screening & Smoothing
     strike_count = 0
     smoothed_risk = raw_risk
+    last_verified = 0
     
-    # Bypass smoothing for critical context violations to allow immediate response
-    if redis_client and not in_learning_mode and not is_critical_violation:
-        try:
-            prev_data_raw = redis_client.get(f"session_state:{batch.session_id}")
-            if prev_data_raw:
-                prev_data = json.loads(prev_data_raw)
-                prev_score = prev_data.get("risk_score", 0)
-                strike_count = prev_data.get("strike_count", 0)
-                smoothed_risk = int((0.4 * raw_risk) + (0.6 * prev_score))
-        except: pass
+    # --- Load Session State (Redis or In-Memory Fallback) ---
+    session_state = get_session_state(batch.session_id)
+    if session_state:
+        prev_score = session_state.get("risk_score", 0)
+        strike_count = session_state.get("strike_count", 0)
+        last_verified = session_state.get("last_verified", 0)
+        
+        # Bypass smoothing for critical context violations to allow immediate response
+        if not in_learning_mode and not is_critical_violation:
+            smoothed_risk = int((0.4 * raw_risk) + (0.6 * prev_score))
+
+    # --- Verification Grace Period ---
+    # If the user just verified via OTP in the last 60 seconds, we give them a trust boost
+    time_since_verified = datetime.datetime.utcnow().timestamp() - last_verified
+    is_verified_recent = time_since_verified < 60
+    
+    if is_verified_recent and not is_critical_violation:
+        smoothed_risk = int(smoothed_risk * 0.2) # 80% risk reduction
+        justifications.append("Trust Boost: Recently Verified")
 
     status = "allowed"
     if is_critical_violation:
@@ -415,25 +539,66 @@ async def process_telemetry(request: Request, batch: TelemetryBatch, db: Session
             status = "otp_triggered" 
             justifications.append(f"Anomaly Strike {strike_count}/3")
     elif smoothed_risk > 30:
-        status = "otp_triggered"
+        # If we just verified, we don't re-trigger OTP immediately for behavioral drift
+        if is_verified_recent:
+            status = "allowed"
+        else:
+            status = "otp_triggered"
         strike_count = max(0, strike_count - 1) 
     else:
         status = "allowed"
         strike_count = 0 
 
     risk_score = smoothed_risk if not is_critical_violation else 100
+
+    # --- Execute Real Banking Logic if Allowed ---
+    if status == "allowed" and batch.action == "execute_fund_transfer" and batch.metadata:
+        amount = float(batch.metadata.get("amount", 0))
+        recipient = batch.metadata.get("recipient", "Unknown")
+        if user.current_balance >= amount:
+            user.current_balance -= amount
+            new_tx = Transaction(
+                user_id=user.id,
+                amount=-amount,
+                recipient=recipient,
+                status="completed",
+                description=f"Transfer to {recipient}"
+            )
+            db.add(new_tx)
+            justifications.append(f"Transfer of ₹{amount} successful")
+        else:
+            status = "blocked"
+            risk_score = 100
+            justifications.append("Insufficient Funds")
     
-    if redis_client:
-        try:
-            redis_payload = {
-                "risk_score": risk_score, 
-                "status": status, 
-                "username": user.username,
-                "strike_count": strike_count
-            }
-            redis_client.setex(f"session_state:{batch.session_id}", 3600, json.dumps(redis_payload))
-        except redis.RedisError:
-            pass
+    elif status != "allowed" and batch.action == "execute_fund_transfer" and batch.metadata:
+        amount = float(batch.metadata.get("amount", 0))
+        recipient = batch.metadata.get("recipient", "Unknown")
+        # If OTP is triggered, mark it as pending
+        tx_status = "pending" if status == "otp_triggered" else "blocked"
+        new_tx = Transaction(
+            user_id=user.id,
+            amount=-amount,
+            recipient=recipient,
+            status=tx_status,
+            description=f"Security Hold: Transfer to {recipient}"
+        )
+        db.add(new_tx)
+
+    otp_reason = None
+    if status == "otp_triggered":
+        otp_reason = "learning" if in_learning_mode else "risk"
+
+    # --- Save Session State ---
+    new_state = {
+        "risk_score": risk_score, 
+        "status": status, 
+        "username": user.username,
+        "strike_count": strike_count,
+        "otp_reason": otp_reason,
+        "last_verified": last_verified
+    }
+    set_session_state(batch.session_id, new_state)
     # Log to Audit Table
     action_label = batch.action # Now defaults to session_sync from frontend
     action_str = f"{action_label}"
@@ -455,7 +620,8 @@ async def process_telemetry(request: Request, batch: TelemetryBatch, db: Session
         "session_id": batch.session_id,
         "risk_score": risk_score,
         "status": status,
-        "is_enrolled": user.is_enrolled
+        "is_enrolled": user.is_enrolled,
+        "otp_reason": otp_reason
     }
 
 @app.get("/api/session/{session_id}")
@@ -484,7 +650,9 @@ async def list_users(db: Session = Depends(get_db)):
     users = db.query(User).all()
     return [{
         "id": u.id, "username": u.username, "is_enrolled": u.is_enrolled,
-        "classification": u.profile.classification if u.profile else "N/A"
+        "classification": "Learning" if u.login_count < 3 else (u.profile.classification if u.profile else "N/A"),
+        "login_count": u.login_count,
+        "current_balance": u.current_balance
     } for u in users]
 
 @app.post("/api/admin/create-user")
@@ -516,6 +684,43 @@ async def reset_biometrics(req: CreateUserRequest, db: Session = Depends(get_db)
     db.add(AuditLog(user_id=user.id, action="biometrics_reset_by_admin", risk_score=0, status="allowed"))
     db.commit()
     return {"status": "reset_complete", "username": req.username}
+
+# --- Feedback Loop Logic (Simplified: Transactions only) ---
+
+@app.post("/verify-otp")
+async def verify_otp(req: VerifyOtpRequest, db: Session = Depends(get_db)):
+    session_id = req.session_id
+    otp = req.otp
+    
+    user_id = SESSIONS.get(session_id)
+    if not user_id: raise HTTPException(status_code=401, detail="Invalid session")
+    
+    if otp != "123456": # Mock OTP
+        raise HTTPException(status_code=401, detail="Invalid OTP")
+    
+    user = db.query(User).filter(User.id == user_id).first()
+    
+    # Update pending transactions for this user
+    pending_txs = db.query(Transaction).filter(Transaction.user_id == user_id, Transaction.status == "pending").all()
+    for tx in pending_txs:
+        # Check if balance is still enough
+        amount = abs(tx.amount)
+        if user.current_balance >= amount:
+            user.current_balance -= amount
+            tx.status = "completed"
+            tx.description = tx.description.replace("Security Hold: ", "")
+        else:
+            tx.status = "blocked"
+            tx.description = "Insufficient Funds after verification"
+
+    # Reset risk (Uses helper to ensure verification timestamp is set)
+    delete_session_state(session_id)
+
+    new_log = AuditLog(user_id=user_id, action="otp_verification_success", risk_score=0, status="allowed")     
+    db.add(new_log)
+    db.commit()
+    
+    return {"status": "success", "username": user.username}
 
 @app.get("/health")
 async def health_check():

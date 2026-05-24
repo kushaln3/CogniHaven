@@ -8,8 +8,10 @@ interface TelemetryContextType {
   riskScore: number;
   isFrozen: boolean;
   needsOtp: boolean;
+  otpReason: 'learning' | 'risk' | null;
   setRiskScore: (score: number) => void;
   resetOtp: () => void;
+  verifyOtp: (otp: string) => Promise<boolean>;
   enrollSession: () => Promise<void>;
   isCalibrated: boolean;
   setIsCalibrated: (val: boolean) => void;
@@ -18,6 +20,7 @@ interface TelemetryContextType {
   username: string | null;
   setUsername: (name: string | null) => void;
   showNotification: (message: string, type?: 'success' | 'error') => void;
+  refreshTrigger: number;
 }
 
 const TelemetryContext = createContext<TelemetryContextType | undefined>(undefined);
@@ -28,14 +31,19 @@ export const TelemetryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [riskScore, setRiskScore] = useState(0);
   const [isFrozen, setIsFrozen] = useState(false);
   const [needsOtp, setNeedsOtp] = useState(false);
+  const [otpReason, setOtpReason] = useState<'learning' | 'risk' | null>(null);
   const [isCalibrated, setIsCalibrated] = useState(false);
   const [notification, setNotification] = useState<{message: string, type: 'success' | 'error'} | null>(null);
+  const [pendingSuccessMessage, setPendingSuccessMessage] = useState<string | null>(null);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const keystrokesRef = useRef<KeystrokeRawEvent[]>([]);
   const mouseMovementsRef = useRef<MouseRawEvent[]>([]);
   const lastBatchTimeRef = useRef<number>(Date.now());
   const currentActionRef = useRef<string>("session_sync");
   const actionMetadataRef = useRef<any>(null);
+
+  const triggerRefresh = () => setRefreshTrigger(prev => prev + 1);
 
   const showNotification = (message: string, type: 'success' | 'error' = 'success') => {
     setNotification({ message, type });
@@ -55,6 +63,12 @@ export const TelemetryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     if (isFrozen || needsOtp) return;
     currentActionRef.current = action;
     actionMetadataRef.current = metadata || null;
+
+    // Immediate feedback for transfers
+    if (action === "execute_fund_transfer" && metadata) {
+      showNotification("Initiating Security Scan...", "success");
+      setPendingSuccessMessage(`Transfer of ₹${metadata.amount} to ${metadata.recipient} initiated.`);
+    }
   };
 
   const logout = () => {
@@ -63,10 +77,12 @@ export const TelemetryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setRiskScore(0);
     setIsFrozen(false);
     setNeedsOtp(false);
+    setOtpReason(null);
     setIsCalibrated(false);
     keystrokesRef.current = [];
     mouseMovementsRef.current = [];
     actionMetadataRef.current = null;
+    setPendingSuccessMessage(null);
   };
 
   const enrollSession = async () => {
@@ -84,7 +100,7 @@ export const TelemetryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     };
 
     try {
-      const response = await fetch('https://7k2k6kcj-8000.inc1.devtunnels.ms/enroll-session', {
+      const response = await fetch('/enroll-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(batch),
@@ -98,6 +114,36 @@ export const TelemetryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }
     } catch (error) {
       console.error('Enrollment failed:', error);
+    }
+  };
+
+  const verifyOtp = async (otp: string) => {
+    try {
+      const response = await fetch('/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId, otp }),
+      });
+
+      if (response.ok) {
+        setNeedsOtp(false);
+        setOtpReason(null);
+        setRiskScore(0);
+        
+        // Trigger data refresh immediately after successful verification
+        triggerRefresh();
+
+        // NOW we show the success message
+        if (pendingSuccessMessage) {
+          showNotification(pendingSuccessMessage, 'success');
+          setPendingSuccessMessage(null);
+        }
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('OTP verification failed:', error);
+      return false;
     }
   };
 
@@ -149,6 +195,8 @@ export const TelemetryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         metadata: actionMetadataRef.current
       };
 
+      const isUserAction = batch.action !== "session_sync";
+
       // Reset action and metadata after sending
       currentActionRef.current = "session_sync";
       actionMetadataRef.current = null;
@@ -161,9 +209,9 @@ export const TelemetryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }
       lastBatchTimeRef.current = now;
 
-      if (batch.keystrokes.length > 0 || batch.mouse_movements.length > 0) {
+      if (batch.keystrokes.length > 0 || batch.mouse_movements.length > 0 || isUserAction) {
         try {
-          const response = await fetch('https://7k2k6kcj-8000.inc1.devtunnels.ms/telemetry-stream', {
+          const response = await fetch('/telemetry-stream', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(batch),
@@ -178,6 +226,16 @@ export const TelemetryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
               setIsFrozen(true);
             } else if (data.status === 'otp_triggered') {
               setNeedsOtp(true);
+              setOtpReason(data.otp_reason);
+            } else if (data.status === 'allowed' && isUserAction) {
+              // If allowed immediately, show message now
+              if (pendingSuccessMessage) {
+                showNotification(pendingSuccessMessage, 'success');
+                setPendingSuccessMessage(null);
+                
+                // Trigger UI refresh
+                triggerRefresh();
+              }
             }
           }
         } catch (error) {
@@ -192,13 +250,16 @@ export const TelemetryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       window.removeEventListener('mousemove', handleMouseMove);
       clearInterval(interval);
     };
-  }, [sessionId, isCalibrated, isFrozen, needsOtp]);
+  }, [sessionId, isCalibrated, isFrozen, needsOtp, pendingSuccessMessage]);
 
-  const resetOtp = () => setNeedsOtp(false);
+  const resetOtp = () => {
+    setNeedsOtp(false);
+    setOtpReason(null);
+  };
 
   return (
     <TelemetryContext.Provider value={{ 
-      sessionId, setSessionId, riskScore, isFrozen, needsOtp, setRiskScore, resetOtp, enrollSession, isCalibrated, setIsCalibrated, setAction, logout, username, setUsername, showNotification
+      sessionId, setSessionId, riskScore, isFrozen, needsOtp, otpReason, setRiskScore, resetOtp, verifyOtp, enrollSession, isCalibrated, setIsCalibrated, setAction, logout, username, setUsername, showNotification, refreshTrigger
     }}>
       {children}
       

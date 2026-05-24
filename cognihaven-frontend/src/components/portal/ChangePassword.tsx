@@ -18,13 +18,13 @@ export const ChangePassword: React.FC = () => {
       return;
     }
     try {
-      const response = await fetch('https://7k2k6kcj-8000.inc1.devtunnels.ms/api/user/update-password', {
+      const response = await fetch('/api/user/update-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           session_id: sessionId,
           old_password: oldPass,
-          new_password: newPass
+          new_password: newPass 
         }),
       });
       if (response.ok) {
