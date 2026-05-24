@@ -46,7 +46,7 @@ export const LiveSOC: React.FC = () => {
 
   const fetchData = async () => {
     try {
-      const logRes = await fetch('https://7k2k6kcj-8000.inc1.devtunnels.ms/api/admin/logs');
+      const logRes = await fetch('http://localhost:8000/api/admin/logs');
       if (logRes.ok) {
         const data = await logRes.json();
         setLogs(data);
@@ -55,7 +55,7 @@ export const LiveSOC: React.FC = () => {
         setStats({ total: data.length, blocked, alerts });
       }
 
-      const userRes = await fetch('https://7k2k6kcj-8000.inc1.devtunnels.ms/api/admin/users');
+      const userRes = await fetch('http://localhost:8000/api/admin/users');
       if (userRes.ok) {
         const userData = await userRes.json();
         setUsers(userData);
@@ -74,7 +74,7 @@ export const LiveSOC: React.FC = () => {
   const handleCreateUser = async () => {
     if (!newUsername) return;
     try {
-      const response = await fetch('https://7k2k6kcj-8000.inc1.devtunnels.ms/api/admin/create-user', {
+      const response = await fetch('http://localhost:8000/api/admin/create-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: newUsername }),
@@ -95,7 +95,7 @@ export const LiveSOC: React.FC = () => {
   const handleResetBiometrics = async (uname: string) => {
     if (!window.confirm(`Reset biometrics for ${uname}?`)) return;
     try {
-      const response = await fetch('https://7k2k6kcj-8000.inc1.devtunnels.ms/api/admin/reset-biometrics', {
+      const response = await fetch('http://localhost:8000/api/admin/reset-biometrics', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: uname }),
@@ -112,7 +112,7 @@ export const LiveSOC: React.FC = () => {
   const handleDeleteUser = async (uname: string) => {
     if (!window.confirm(`PERMANENTLY DELETE user ${uname}?`)) return;
     try {
-      const response = await fetch('https://7k2k6kcj-8000.inc1.devtunnels.ms/api/admin/delete-user', {
+      const response = await fetch('http://localhost:8000/api/admin/delete-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: uname }),
@@ -230,13 +230,12 @@ export const LiveSOC: React.FC = () => {
                       
                       // Human Interpretation logic
                       let interpretation = "In Bounds";
-                      let rating = "Normal";
                       let color = "text-emerald-500";
                       let icon = <CheckCircle2 className="w-3 h-3 mr-1" />;
 
-                      if (absDiff > 100) { interpretation = parseFloat(diff) > 0 ? "Extreme Lag" : "Extreme Speed"; rating = "Critical"; color = "text-red-500"; icon = <ShieldAlert className="w-3 h-3 mr-1" />; }
-                      else if (absDiff > 50) { interpretation = parseFloat(diff) > 0 ? "Heavy Latency" : "Rapid Burst"; rating = "Suspicious"; color = "text-amber-500"; icon = <AlertTriangle className="w-3 h-3 mr-1" />; }
-                      else if (absDiff > 30) { interpretation = parseFloat(diff) > 0 ? "Slight Drift" : "Slight Acceleration"; rating = "Caution"; color = "text-amber-400"; icon = <Activity className="w-3 h-3 mr-1" />; }
+                      if (absDiff > 100) { interpretation = parseFloat(diff) > 0 ? "Extreme Lag" : "Extreme Speed"; color = "text-red-500"; icon = <ShieldAlert className="w-3 h-3 mr-1" />; }
+                      else if (absDiff > 50) { interpretation = parseFloat(diff) > 0 ? "Heavy Latency" : "Rapid Burst"; color = "text-amber-500"; icon = <AlertTriangle className="w-3 h-3 mr-1" />; }
+                      else if (absDiff > 30) { interpretation = parseFloat(diff) > 0 ? "Slight Drift" : "Slight Acceleration"; color = "text-amber-400"; icon = <Activity className="w-3 h-3 mr-1" />; }
 
                       return (
                         <tr key={metric.label} className={`hover:bg-indigo-500/5 transition-colors duration-200 ${absDiff > 50 ? 'bg-red-500/5' : ''}`}>
@@ -463,7 +462,11 @@ export const LiveSOC: React.FC = () => {
                         {user.is_enrolled ? 'ENROLLED' : 'PENDING'}
                       </span>
                       {user.is_enrolled && (
-                        <span className="text-[9px] bg-indigo-500/5 text-indigo-400 px-3 py-1 rounded-full font-black uppercase tracking-widest border border-indigo-500/20">
+                        <span className={`text-[9px] px-3 py-1 rounded-full font-black uppercase tracking-widest border ${
+                          user.classification === 'Learning' 
+                            ? 'bg-amber-500/5 text-amber-500 border-amber-500/20 shadow-[0_0_8px_rgba(245,158,11,0.1)]' 
+                            : 'bg-indigo-500/5 text-indigo-400 border-indigo-500/20'
+                        }`}>
                           {user.classification} PROFILE
                         </span>
                       )}

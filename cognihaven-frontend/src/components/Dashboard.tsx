@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { LayoutDashboard, Wallet, LogOut, Send, Lock, User, Landmark, FileText, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTelemetry } from '../context/TelemetryContext';
@@ -10,8 +10,40 @@ import { ViewStatement } from './portal/ViewStatement';
 
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
-  const { username } = useTelemetry();
+  const { username, sessionId } = useTelemetry();
   const [activeTab, setActiveTab] = useState('overview');
+  const [balance, setBalance] = useState(50000.00);
+  const [transactions, setTransactions] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!sessionId) return;
+      try {
+        const accRes = await fetch(`http://localhost:8000/api/user/account?session_id=${sessionId}`);
+        if (accRes.ok) {
+          const accData = await accRes.json();
+          setBalance(accData.current_balance);
+        }
+
+        const txRes = await fetch(`http://localhost:8000/api/user/transactions?session_id=${sessionId}`);
+        if (txRes.ok) {
+          const txData = await txRes.json();
+          setTransactions(txData.map((t: any) => ({
+            id: t.id,
+            name: t.recipient,
+            amount: t.amount,
+            date: new Date(t.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+            type: t.status.toUpperCase()
+          })));
+        }
+      } catch (err) {
+        console.error("Failed to fetch dashboard data:", err);
+      }
+    };
+    fetchData();
+    const interval = setInterval(fetchData, 5000);
+    return () => clearInterval(interval);
+  }, [sessionId]);
 
   const navItems = [
     { id: 'overview', label: 'Account Overview', icon: Wallet },
@@ -20,13 +52,6 @@ export const Dashboard: React.FC = () => {
     { id: 'profile', label: 'Update Profile', icon: User },
     { id: 'loan', label: 'Loan Application', icon: Landmark },
     { id: 'statement', label: 'View Statement', icon: FileText },
-  ];
-
-  const transactions = [
-    { id: 1, name: 'Amazon.com', amount: -89.99, date: 'May 22, 2026', type: 'Shopping' },
-    { id: 2, name: 'Salary Deposit', amount: 4500.00, date: 'May 20, 2026', type: 'Income' },
-    { id: 3, name: 'Starbucks Coffee', amount: -5.50, date: 'May 19, 2026', type: 'Food' },
-    { id: 4, name: 'Rent Payment', amount: -1200.00, date: 'May 15, 2026', type: 'Housing' },
   ];
 
   const renderContent = () => {
@@ -62,7 +87,7 @@ export const Dashboard: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
               <p className="text-sm font-medium text-slate-500 mb-1">Total Balance</p>
-              <h3 className="text-3xl font-bold text-slate-800">$12,450.80</h3>
+              <h3 className="text-3xl font-bold text-slate-800">₹{balance.toLocaleString()}</h3>
               <div className="mt-4 flex items-center text-green-500 text-sm">
                 <span>+2.5% from last month</span>
               </div>
@@ -70,9 +95,9 @@ export const Dashboard: React.FC = () => {
             
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
               <p className="text-sm font-medium text-slate-500 mb-1">Savings</p>
-              <h3 className="text-3xl font-bold text-slate-800">$8,200.00</h3>
+              <h3 className="text-3xl font-bold text-slate-800">₹{(balance * 0.4).toLocaleString()}</h3>
               <div className="mt-4 flex items-center text-indigo-500 text-sm">
-                <span>Goal: $10k (82%)</span>
+                <span>Goal: ₹{(balance * 0.5).toLocaleString()} (80%)</span>
               </div>
             </div>
 
@@ -91,7 +116,7 @@ export const Dashboard: React.FC = () => {
             <div className="overflow-x-auto">
               <table className="w-full">
                 <tbody className="divide-y divide-slate-100">
-                  {transactions.map((t) => (
+                  {transactions.length > 0 ? transactions.map((t) => (
                     <tr key={t.id} className="hover:bg-slate-50 transition-colors">
                       <td className="px-6 py-4">
                         <div className="flex items-center">
@@ -106,10 +131,14 @@ export const Dashboard: React.FC = () => {
                       </td>
                       <td className="px-6 py-4 text-sm text-slate-500">{t.date}</td>
                       <td className={`px-6 py-4 font-bold text-right ${t.amount > 0 ? 'text-green-600' : 'text-slate-800'}`}>
-                        {t.amount > 0 ? '+' : ''}{t.amount.toFixed(2)}
+                        {t.amount > 0 ? '+' : ''}₹{Math.abs(t.amount).toLocaleString()}
                       </td>
                     </tr>
-                  ))}
+                  )) : (
+                    <tr>
+                      <td colSpan={3} className="px-6 py-10 text-center text-slate-400 italic">No transactions found.</td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>

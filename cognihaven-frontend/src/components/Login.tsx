@@ -18,7 +18,7 @@ export const Login: React.FC = () => {
     if (!usernameInput) return;
     setCheckingRisk(true);
     try {
-      const response = await fetch('https://7k2k6kcj-8000.inc1.devtunnels.ms/pre-login-check', {
+      const response = await fetch('http://localhost:8000/pre-login-check', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: usernameInput }),
@@ -40,7 +40,7 @@ export const Login: React.FC = () => {
     e.preventDefault();
     logout(); // Ensure previous tracking stops
     try {
-      const response = await fetch('https://7k2k6kcj-8000.inc1.devtunnels.ms/login', {
+      const response = await fetch('http://localhost:8000/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -114,7 +114,7 @@ export const Login: React.FC = () => {
 
           {otpRequired && (
             <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-              <label className="block text-sm font-medium text-amber-700 mb-1 flex items-center">
+              <label className={`block text-sm font-medium mb-1 flex items-center ${isFirstLogin ? 'text-emerald-700' : 'text-amber-700'}`}>
                 <Shield className="w-4 h-4 mr-1" />
                 {isFirstLogin 
                   ? `Security Profile Setup (Step ${learningStep} of 3)` 
@@ -123,13 +123,17 @@ export const Login: React.FC = () => {
               <input
                 type="text"
                 required
-                className="w-full px-4 py-3 rounded-lg border-2 border-amber-300 bg-amber-50 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all outline-none font-mono text-center text-lg tracking-widest"
+                className={`w-full px-4 py-3 rounded-lg border-2 transition-all outline-none font-mono text-center text-lg tracking-widest ${
+                  isFirstLogin 
+                    ? 'border-emerald-200 bg-emerald-50/30 focus:ring-emerald-500/20 focus:border-emerald-500' 
+                    : 'border-amber-300 bg-amber-50/30 focus:ring-amber-500/20 focus:border-amber-500'
+                }`}
                 placeholder="123456"
                 maxLength={6}
                 value={otp}
                 onChange={(e) => setOtp(e.target.value)}
               />
-              <p className="mt-1 text-xs text-amber-600">
+              <p className={`mt-1 text-xs ${isFirstLogin ? 'text-emerald-600' : 'text-amber-600'}`}>
                 {isFirstLogin 
                   ? "We're establishing your behavioral baseline. Please verify your identity to continue." 
                   : "High-risk login detected. Enter the code sent to your device."}

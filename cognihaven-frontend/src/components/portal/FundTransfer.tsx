@@ -13,12 +13,26 @@ export const FundTransfer: React.FC = () => {
 
   const handleTransfer = (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Strict Form Validation
+    if (!target.trim() || !amount || parseFloat(amount) <= 0) {
+      showNotification("Please fill in all fields to initiate the transaction.", "error");
+      return;
+    }
+
     if (needsOtp || isFrozen) {
       showNotification("Transaction blocked: Security verification required", "error");
       return;
     }
-    setAction("execute_fund_transfer", { amount: parseFloat(amount) });
-    showNotification(`Transfer of $${amount} to ${target} initiated.`);
+
+    // We no longer show the success message here immediately if we want to fix the order.
+    // Instead, we let the TelemetryContext handle the completion notification.
+    setAction("execute_fund_transfer", { 
+      amount: parseFloat(amount),
+      recipient: target 
+    });
+    
+    // Clear inputs
     setTarget('');
     setAmount('');
   };
@@ -40,7 +54,7 @@ export const FundTransfer: React.FC = () => {
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Amount ($)</label>
+          <label className="block text-sm font-medium text-slate-700 mb-1">Amount (₹)</label>
           <div className="relative">
             <input 
               type="number" 
