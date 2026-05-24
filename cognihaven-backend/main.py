@@ -713,16 +713,6 @@ async def verify_otp(req: VerifyOtpRequest, db: Session = Depends(get_db)):
     
     user = db.query(User).filter(User.id == user_id).first()
     
-    # --- FEEDBACK LOOP: Incorporate verified anomalous data ---
-    # Fetch unverified telemetry that was recently captured
-    unverified_telemetry = db.query(RawTelemetry).filter(
-        RawTelemetry.user_id == user_id, 
-        RawTelemetry.is_verified == False
-    ).all()
-    
-    if unverified_telemetry:
-        update_behavior_profile(db, user_id, unverified_telemetry)
-
     # Update pending transactions for this user
     pending_txs = db.query(Transaction).filter(Transaction.user_id == user_id, Transaction.status == "pending").all()
     for tx in pending_txs:
@@ -742,10 +732,9 @@ async def verify_otp(req: VerifyOtpRequest, db: Session = Depends(get_db)):
             redis_client.delete(f"session_state:{session_id}")
         except: pass
 
-    new_log = AuditLog(user_id=user_id, action="otp_verification_success [Adaptive Baseline Updated]", risk_score=0, status="allowed")
+    new_log = AuditLog(user_id=user_id, action="otp_verification_success", risk_score=0, status="allowed")
     db.add(new_log)
     db.commit()
-    
     return {"status": "success", "username": user.username}
 
 @app.get("/health")
