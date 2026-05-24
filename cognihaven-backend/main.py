@@ -461,10 +461,10 @@ async def process_telemetry(request: Request, batch: TelemetryBatch, db: Session
             if amount > 100000: 
                 context_risk_spike = 100
                 is_critical_violation = True
-                justifications.append(f"HIGH RISK: Extreme Loan Request (${amount})")
+                justifications.append(f"HIGH RISK: Extreme Loan Request (₹{amount})")
             elif amount > 20000:
                 context_risk_spike += 50
-                justifications.append(f"High-Value Loan (${amount})")
+                justifications.append(f"High-Value Loan (₹{amount})")
         
         if batch.action == "execute_profile_update":
             changes = batch.metadata.get("changes", [])
@@ -541,7 +541,7 @@ async def process_telemetry(request: Request, batch: TelemetryBatch, db: Session
                 description=f"Transfer to {recipient}"
             )
             db.add(new_tx)
-            justifications.append(f"Transfer of ${amount} successful")
+            justifications.append(f"Transfer of ₹{amount} successful")
         else:
             status = "blocked"
             risk_score = 100

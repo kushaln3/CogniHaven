@@ -8,7 +8,7 @@ export const OtpModal: React.FC = () => {
   const { verifyOtp, otpReason, showNotification } = useTelemetry();
 
   const handleChange = (index: number, value: string) => {
-    if (!/^\d*$/.test(value)) return; // Only numbers
+    if (!/^\d*₹/.test(value)) return; // Only numbers
     if (value.length > 1) return;
     const newCode = [...code];
     newCode[index] = value;
