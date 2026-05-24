@@ -5,6 +5,7 @@ import pandas as pd
 import datetime
 import redis
 import json
+import httpx  # <-- NEW: Added for async external API calls
 from fastapi import FastAPI, Body, Depends, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -132,6 +133,28 @@ def extract_features(batch: TelemetryBatch):
         float(flight_mean), float(flight_variance),
         float(mouse_velocity_mean), float(mouse_velocity_variance)
     ]
+
+# --- VPN / TOR Threat Detection Helper ---
+async def check_vpn_tor(ip_address: str) -> bool:
+    """
+    Queries a free IP intelligence API to check for VPN/Proxy/TOR usage.
+    Implements strict fail-open and local-bypass mechanisms.
+    """
+    # Bypass for local Dev Tunnel testing
+    if ip_address in ["127.0.0.1", "localhost", "::1"] or ip_address.startswith("192.168."):
+        return False
+
+    try:
+        url = f"http://ip-api.com/json/{ip_address}?fields=proxy"
+        # Strict 2-second timeout to prevent blocking the telemetry loop
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, timeout=2.0)
+            data = response.json()
+            return data.get("proxy", False)
+            
+    except Exception as e:
+        print(f"[WARNING] IP API check failed/timed out: {e}. Failing open.")
+        return False
 
 # --- Endpoints ---
 
@@ -273,15 +296,33 @@ async def update_password(req: UpdatePasswordRequest, db: Session = Depends(get_
 
 @app.post("/telemetry-stream")
 async def process_telemetry(request: Request, batch: TelemetryBatch, db: Session = Depends(get_db)):
-    # --- Layer 1: Perimeter Screening (Rate Limiting) ---
+    # --- Layer 1: Perimeter Screening (Rate Limiting & Threat IPs) ---
     if redis_client:
         try:
             client_ip = request.client.host
+            
+            # 1. Rate Limiting Check
             request_count = redis_client.incr(f"rate_limit:{client_ip}")
             if request_count == 1:
                 redis_client.expire(f"rate_limit:{client_ip}", 60) # 1-minute window
             if request_count > 30: # Slightly higher for 3s heartbeats
                 raise HTTPException(status_code=429, detail="Layer 1 Block: Automated brute-force detected")
+
+            # 2. NEW: VPN / TOR Detection (Cached)
+            ip_cache_key = f"ip_threat_status:{client_ip}"
+            threat_status = redis_client.get(ip_cache_key)
+            
+            if threat_status is None:
+                # First time seeing this IP: Check it and cache it for 24 hours (86400 seconds)
+                is_threat = await check_vpn_tor(client_ip)
+                redis_client.setex(ip_cache_key, 86400, "1" if is_threat else "0")
+            else:
+                is_threat = (threat_status == "1")
+
+            # Instant Block if it's a known anonymizer
+            if is_threat:
+                raise HTTPException(status_code=403, detail="Layer 1 Block: VPN/TOR access is strictly prohibited.")
+
         except redis.RedisError:
             pass 
 
