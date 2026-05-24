@@ -339,22 +339,35 @@ async def process_telemetry(request: Request, batch: TelemetryBatch, db: Session
 
     # 3. Contextual Rule Engine Layer
     context_risk_spike = 0
+    is_critical_violation = False
+    
     if batch.metadata:
         if batch.action == "execute_fund_transfer":
             amount = float(batch.metadata.get("amount", 0))
-            if amount > 10000:
+            if amount > 50000: 
+                context_risk_spike = 100
+                is_critical_violation = True
+                justifications.append(f"HIGH RISK: Extreme Transfer (${amount})")
+            elif amount > 10000:
                 context_risk_spike += 40
                 justifications.append(f"High-Value Transfer (${amount})")
+        
         if batch.action == "execute_loan_application":
             amount = float(batch.metadata.get("amount", 0))
-            if amount > 20000:
+            if amount > 100000: 
+                context_risk_spike = 100
+                is_critical_violation = True
+                justifications.append(f"HIGH RISK: Extreme Loan Request (${amount})")
+            elif amount > 20000:
                 context_risk_spike += 50
                 justifications.append(f"High-Value Loan (${amount})")
+        
         if batch.action == "execute_profile_update":
             changes = batch.metadata.get("changes", [])
             if "email" in changes and "phone" in changes:
                 context_risk_spike = 100
-                justifications.append("Identity Wipe Attempt")
+                is_critical_violation = True
+                justifications.append("CRITICAL: Identity Wipe Attempt")
 
     # 4. Hybrid Aggregation & Smoothing (EWMA)
     raw_risk = 0
@@ -373,7 +386,8 @@ async def process_telemetry(request: Request, batch: TelemetryBatch, db: Session
     strike_count = 0
     smoothed_risk = raw_risk
     
-    if redis_client and not in_learning_mode:
+    # Bypass smoothing for critical context violations to allow immediate response
+    if redis_client and not in_learning_mode and not is_critical_violation:
         try:
             prev_data_raw = redis_client.get(f"session_state:{batch.session_id}")
             if prev_data_raw:
@@ -384,7 +398,16 @@ async def process_telemetry(request: Request, batch: TelemetryBatch, db: Session
         except: pass
 
     status = "allowed"
-    if smoothed_risk > 65:
+    if is_critical_violation:
+        if batch.action == "execute_profile_update":
+            status = "blocked" # Critical identity wipe - immediate block
+            risk_score = 100
+            strike_count = 3
+        else:
+            status = "otp_triggered" # High transaction - force verification
+            risk_score = 100
+            strike_count = max(strike_count, 1)
+    elif smoothed_risk > 65:
         strike_count += 1
         if strike_count >= 3:
             status = "blocked"
@@ -398,7 +421,7 @@ async def process_telemetry(request: Request, batch: TelemetryBatch, db: Session
         status = "allowed"
         strike_count = 0 
 
-    risk_score = smoothed_risk
+    risk_score = smoothed_risk if not is_critical_violation else 100
     
     if redis_client:
         try:

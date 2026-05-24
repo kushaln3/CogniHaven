@@ -18,7 +18,7 @@ export const UpdateProfile: React.FC = () => {
       return;
     }
     try {
-      const response = await fetch('http://localhost:8000/api/user/update-profile', {
+      const response = await fetch('https://7k2k6kcj-8000.inc1.devtunnels.ms/api/user/update-profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
