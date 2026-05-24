@@ -71,3 +71,5 @@ export const ViewStatement: React.FC = () => {
     </div>
   );
 };
+
+export default ViewStatement;
