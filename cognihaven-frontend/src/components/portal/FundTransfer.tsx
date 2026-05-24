@@ -13,12 +13,25 @@ export const FundTransfer: React.FC = () => {
 
   const handleTransfer = (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Strict Form Validation
+    if (!target.trim() || !amount || parseFloat(amount) <= 0) {
+      showNotification("Please fill in all fields to initiate the transaction.", "error");
+      return;
+    }
+
     if (needsOtp || isFrozen) {
       showNotification("Transaction blocked: Security verification required", "error");
       return;
     }
-    setAction("execute_fund_transfer", { amount: parseFloat(amount) });
-    showNotification(`Transfer of $${amount} to ${target} initiated.`);
+
+    // Pass recipient to metadata
+    setAction("execute_fund_transfer", { 
+      amount: parseFloat(amount),
+      recipient: target
+    });
+    
+    showNotification(`Transfer of ₹${amount} to ${target} initiated.`);
     setTarget('');
     setAmount('');
   };
@@ -40,7 +53,7 @@ export const FundTransfer: React.FC = () => {
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Amount ($)</label>
+          <label className="block text-sm font-medium text-slate-700 mb-1">Amount (₹)</label>
           <div className="relative">
             <input 
               type="number" 
@@ -49,7 +62,7 @@ export const FundTransfer: React.FC = () => {
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
             />
-            <DollarSign className="absolute left-3 top-3.5 w-5 h-5 text-slate-400" />
+            <div className="absolute left-3 top-3.5 w-5 h-5 text-slate-400 font-bold">₹</div>
           </div>
         </div>
         <button className="w-full bg-indigo-600 text-white font-bold py-3 rounded-xl hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-100">

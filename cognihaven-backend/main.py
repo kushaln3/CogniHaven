@@ -12,7 +12,8 @@ from typing import List, Optional, Dict
 from sqlalchemy.orm import Session
 from database import SessionLocal, User, BehaviorProfile, AuditLog, Transaction, RawTelemetry, init_db
 
-# ...
+# Initialize Database
+init_db()
 
 class AccountResponse(BaseModel):
     username: str

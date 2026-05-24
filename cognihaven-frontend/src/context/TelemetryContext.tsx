@@ -84,7 +84,7 @@ export const TelemetryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     };
 
     try {
-      const response = await fetch('http://localhost:8000/enroll-session', {
+      const response = await fetch('https://7k2k6kcj-8000.inc1.devtunnels.ms/enroll-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(batch),
@@ -163,7 +163,7 @@ export const TelemetryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
       if (batch.keystrokes.length > 0 || batch.mouse_movements.length > 0) {
         try {
-          const response = await fetch('http://localhost:8000/telemetry-stream', {
+          const response = await fetch('https://7k2k6kcj-8000.inc1.devtunnels.ms/telemetry-stream', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(batch),
