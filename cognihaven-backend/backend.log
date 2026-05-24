@@ -1,0 +1,6 @@
+WARNING: Could not connect to Redis: Timeout connecting to server. System falling back to degraded mode (No Rate Limiting/Caching).
+STATUS: ML Model loaded successfully (Brain Active)
+INFO:     Started server process [10032]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
