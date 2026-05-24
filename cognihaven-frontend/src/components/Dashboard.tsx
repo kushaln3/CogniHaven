@@ -10,7 +10,8 @@ import { ViewStatement } from './portal/ViewStatement';
 
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
-  const { username, sessionId, logout: contextLogout } = useTelemetry();
+  // Added setAction here
+  const { username, sessionId, logout: contextLogout, setAction } = useTelemetry();
   const [activeTab, setActiveTab] = useState('overview');
   const [balance, setBalance] = useState(50000.00);
   const [transactions, setTransactions] = useState<any[]>([]);
@@ -54,7 +55,15 @@ export const Dashboard: React.FC = () => {
     { id: 'statement', label: 'View Statement', icon: FileText },
   ];
 
+  // NEW: Centralized handler to map UI navigation to backend state machine actions
+  const handleTabChange = (tabId: string) => {
+    setActiveTab(tabId);
+    if (tabId === 'overview') setAction('dashboard');
+    if (tabId === 'security') setAction('settings');
+  };
+
   const handleLogout = () => {
+    setAction('logout'); // Broadcast logout to state machine
     contextLogout();
     navigate('/');
   };
@@ -75,13 +84,13 @@ export const Dashboard: React.FC = () => {
             </div>
             <div className="flex space-x-4">
               <button
-                onClick={() => setActiveTab('transfer')}
+                onClick={() => handleTabChange('transfer')}
                 className="bg-white border border-slate-200 px-4 py-2 rounded-lg font-medium text-slate-700 hover:bg-slate-50 transition-colors"    
               >
                 Transfer
               </button>
               <button
-                onClick={() => setActiveTab('loan')}
+                onClick={() => handleTabChange('loan')}
                 className="bg-indigo-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-100"
               >
                 Apply for Loan
@@ -116,7 +125,7 @@ export const Dashboard: React.FC = () => {
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200">
             <div className="p-6 border-b border-slate-100 flex justify-between items-center">
               <h2 className="text-lg font-bold text-slate-800">Recent Transactions</h2>
-              <button onClick={() => setActiveTab('statement')} className="text-indigo-600 text-sm font-semibold hover:underline">View All</button> 
+              <button onClick={() => handleTabChange('statement')} className="text-indigo-600 text-sm font-semibold hover:underline">View All</button> 
             </div>
             <div className="overflow-x-auto">
               <table className="w-full">
@@ -168,7 +177,7 @@ export const Dashboard: React.FC = () => {
           {navItems.map((item) => (
             <button
               key={item.id}
-              onClick={() => setActiveTab(item.id)}
+              onClick={() => handleTabChange(item.id)}
               className={`w-full flex items-center px-4 py-3 rounded-xl font-medium transition-all ${
                 activeTab === item.id
                 ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100'

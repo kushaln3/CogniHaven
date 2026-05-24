@@ -13,6 +13,7 @@ export const ChangePassword: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setAction("change_pin");
     if (needsOtp || isFrozen) {
       showNotification("Update blocked: Security verification required", "error");
       return;

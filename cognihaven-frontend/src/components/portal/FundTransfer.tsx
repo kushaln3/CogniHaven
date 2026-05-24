@@ -13,6 +13,7 @@ export const FundTransfer: React.FC = () => {
 
   const handleTransfer = (e: React.FormEvent) => {
     e.preventDefault();
+    setAction("execute_fund_transfer");
 
     // Strict Form Validation
     if (!target.trim() || !amount || parseFloat(amount) <= 0) {
