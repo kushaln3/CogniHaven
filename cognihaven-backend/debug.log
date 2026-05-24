@@ -1,0 +1,35 @@
+
+[2026-05-25 02:11:46.813106] Incoming telemetry for session be483db1-8151-4ebe-b72d-0c91afb6414d, action session_sync
+
+[2026-05-25 02:11:49.818705] Incoming telemetry for session be483db1-8151-4ebe-b72d-0c91afb6414d, action session_sync
+
+[2026-05-25 02:11:55.801423] Incoming telemetry for session be483db1-8151-4ebe-b72d-0c91afb6414d, action session_sync
+
+[2026-05-25 02:11:58.813489] Incoming telemetry for session be483db1-8151-4ebe-b72d-0c91afb6414d, action session_sync
+
+[2026-05-25 02:12:03.876194] Incoming telemetry for session be483db1-8151-4ebe-b72d-0c91afb6414d, action execute_fund_transfer
+
+[2026-05-25 02:12:22.647625] Incoming telemetry for session 75b9d378-4f22-4d5f-bf3a-1da9bdb7b641, action view_transfer_form
+Point 1: Raw telemetry stored
+Point 2: Behavioral layers processed
+Point 3: Contextual rules processed
+
+[2026-05-25 02:12:25.652749] Incoming telemetry for session 75b9d378-4f22-4d5f-bf3a-1da9bdb7b641, action session_sync
+Point 1: Raw telemetry stored
+Point 2: Behavioral layers processed
+Point 3: Contextual rules processed
+
+[2026-05-25 02:12:28.834628] Incoming telemetry for session 75b9d378-4f22-4d5f-bf3a-1da9bdb7b641, action execute_fund_transfer
+Point 1: Raw telemetry stored
+Point 2: Behavioral layers processed
+Point 3: Contextual rules processed
+
+[2026-05-25 02:12:31.833571] Incoming telemetry for session 75b9d378-4f22-4d5f-bf3a-1da9bdb7b641, action session_sync
+Point 1: Raw telemetry stored
+Point 2: Behavioral layers processed
+Point 3: Contextual rules processed
+
+[2026-05-25 02:12:34.875233] Incoming telemetry for session 75b9d378-4f22-4d5f-bf3a-1da9bdb7b641, action view_change_password
+Point 1: Raw telemetry stored
+Point 2: Behavioral layers processed
+Point 3: Contextual rules processed

@@ -37,16 +37,16 @@ export const OtpModal: React.FC = () => {
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[90] flex items-center justify-center p-4">
       <div className="max-w-md w-full bg-white rounded-3xl p-8 shadow-2xl border border-slate-200">
         <div className="flex items-center mb-6">
-          <div className={`${isLearning ? 'bg-indigo-100' : 'bg-amber-100'} p-3 rounded-2xl mr-4`}>
+          <div className={`${isLearning ? 'bg-emerald-50' : 'bg-amber-100'} p-3 rounded-2xl mr-4`}>
             {isLearning ? (
-              <Fingerprint className={`w-6 h-6 ${isLearning ? 'text-indigo-600' : 'text-amber-600'}`} />
+              <Fingerprint className={`w-6 h-6 text-emerald-500`} />
             ) : (
               <Smartphone className="w-6 h-6 text-amber-600" />
             )}
           </div>
           <div>
-            <h2 className="text-xl font-bold text-slate-800 tracking-tight">
-              {isLearning ? 'Adaptive Learning' : 'Step-Up Authentication'}
+            <h2 className={`text-xl font-bold ${isLearning ? 'text-emerald-900' : 'text-slate-800'} tracking-tight`}>
+              {isLearning ? 'Establishing Baseline' : 'Step-Up Authentication'}
             </h2>
             <p className="text-sm text-slate-500 font-medium uppercase tracking-wider text-[10px]">
               {isLearning ? 'Identity Calibration' : 'Verification Required'}
@@ -56,7 +56,7 @@ export const OtpModal: React.FC = () => {
 
         <p className="text-slate-600 mb-8 leading-relaxed">
           {isLearning 
-            ? "We're currently calibrating your unique behavioral profile. To proceed with the setup, please verify your identity."
+            ? "We're establishing your behavioral baseline to keep your account safe. Please verify your identity to continue."
             : "We noticed a change in your behavior or a high-value action. To ensure it's still you, please enter the code sent to your mobile device."
           }
         </p>
@@ -68,7 +68,13 @@ export const OtpModal: React.FC = () => {
               id={`otp-${i}`}
               type="text"
               maxLength={1}
-              className={`w-12 h-14 text-center text-xl font-bold border-2 ${error ? 'border-rose-500 ring-rose-500/10' : 'border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/10'} rounded-xl focus:ring-4 outline-none transition-all`}
+              className={`w-12 h-14 text-center text-xl font-bold border-2 ${
+                error 
+                  ? 'border-rose-500 ring-rose-500/10' 
+                  : isLearning 
+                    ? 'border-emerald-100 focus:border-emerald-500 focus:ring-emerald-500/10' 
+                    : 'border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/10'
+              } rounded-xl focus:ring-4 outline-none transition-all`}
               value={digit}
               onChange={(e) => handleChange(i, e.target.value)}
             />
@@ -80,7 +86,7 @@ export const OtpModal: React.FC = () => {
 
         <button 
           onClick={handleVerify}
-          className={`w-full ${isLearning ? 'bg-slate-800 hover:bg-slate-900' : 'bg-indigo-600 hover:bg-indigo-700'} text-white font-bold py-4 rounded-2xl transition-all shadow-xl shadow-indigo-100 flex items-center justify-center`}
+          className={`w-full ${isLearning ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-100' : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100'} text-white font-bold py-4 rounded-2xl transition-all shadow-xl flex items-center justify-center`}
         >
           <ShieldCheck className="w-5 h-5 mr-2" />
           {isLearning ? 'Continue Calibration' : 'Verify Identity'}

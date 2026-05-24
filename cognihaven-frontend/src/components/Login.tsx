@@ -83,7 +83,7 @@ export const Login: React.FC = () => {
               <input
                 type="text"
                 required
-                className={`w-full px-4 py-3 rounded-lg border ${otpRequired ? 'border-amber-400 bg-amber-50' : 'border-slate-300'} focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all outline-none`}
+                className={`w-full px-4 py-3 rounded-lg border ${otpRequired ? (isFirstLogin ? 'border-emerald-400 bg-emerald-50' : 'border-amber-400 bg-amber-50') : 'border-slate-300'} focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all outline-none`}
                 placeholder="Username"
                 value={usernameInput}
                 onChange={(e) => setUsernameInput(e.target.value)}
@@ -114,7 +114,7 @@ export const Login: React.FC = () => {
 
           {otpRequired && (
             <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-              <label className="block text-sm font-medium text-amber-700 mb-1 flex items-center">
+              <label className={`block text-sm font-medium ${isFirstLogin ? 'text-emerald-700' : 'text-amber-700'} mb-1 flex items-center`}>
                 <Shield className="w-4 h-4 mr-1" />
                 {isFirstLogin 
                   ? `Security Profile Setup (Step ${learningStep} of 3)` 
@@ -123,15 +123,15 @@ export const Login: React.FC = () => {
               <input
                 type="text"
                 required
-                className="w-full px-4 py-3 rounded-lg border-2 border-amber-300 bg-amber-50 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all outline-none font-mono text-center text-lg tracking-widest"
+                className={`w-full px-4 py-3 rounded-lg border-2 ${isFirstLogin ? 'border-emerald-300 bg-emerald-50 focus:ring-emerald-500 focus:border-emerald-500' : 'border-amber-300 bg-amber-50 focus:ring-amber-500 focus:border-amber-500'} transition-all outline-none font-mono text-center text-lg tracking-widest`}
                 placeholder="123456"
                 maxLength={6}
                 value={otp}
                 onChange={(e) => setOtp(e.target.value)}
               />
-              <p className="mt-1 text-xs text-amber-600">
+              <p className={`mt-1 text-xs ${isFirstLogin ? 'text-emerald-600' : 'text-amber-600'}`}>
                 {isFirstLogin 
-                  ? "We're establishing your behavioral baseline. Please verify your identity to continue." 
+                  ? "We're establishing your behavioral baseline to keep your account safe. Please verify your identity to continue." 
                   : "High-risk login detected. Enter the code sent to your device."}
               </p>
             </div>

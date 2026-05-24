@@ -32,7 +32,8 @@ export const Dashboard: React.FC = () => {
       } catch (error) {
         console.error("Dashboard data fetch error:", error);
       }
-      };    fetchData();
+    };
+    fetchData();
     const interval = setInterval(fetchData, 10000);
     return () => clearInterval(interval);
   }, [sessionId, activeTab, refreshTrigger]);
